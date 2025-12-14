@@ -1,0 +1,13 @@
+# Dépendances (trop lourd)
+node_modules/
+
+# Secrets (TRÈS IMPORTANT)
+.env
+serviceAccountKey.json
+
+# Fichiers systèmes
+.DS_Store
+Thumbs.db
+
+# Dossier d'images (on ne veut pas sauvegarder les tests)
+uploads/
