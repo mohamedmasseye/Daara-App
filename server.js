@@ -51,7 +51,7 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
 // Middlewares
 const allowedOrigins = [
-  'https://daaraserignemordiop.vercel.app/', // REMPLACEZ CETTE VALEUR PAR VOTRE VRAIE URL VERCEL
+  'https://daaraserignemordiop.vercel.app', // REMPLACEZ CETTE VALEUR PAR VOTRE VRAIE URL VERCEL
   'http://localhost:3000',                  // Utile pour vos tests locaux
   'http://localhost:5000'                 // Utile si le front est sur 5000
 ];
@@ -109,7 +109,8 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Utilitaire URL Fichier
-const getFileUrl = (req, filename) => filename ? `https://${req.get('host')}/uploads/${filename}` : null;
+const getFileUrl = (req, filename) => filename ? `${req.protocol}://${req.get('host')}/uploads/${filename}` : null;
+
 // ==========================================
 // 3. ROUTES API
 // ==========================================
