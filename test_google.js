@@ -7,7 +7,7 @@ async function testGoogleRoute() {
     // On envoie un FAUX token.
     // Si le serveur est bien configuré, il va demander à Firebase : "C'est quoi ça ?"
     // Et Firebase va répondre : "C'est un faux token !" => Erreur 401.
-    const reponse = await axios.post('http://192.168.1.6:5000/api/auth/google', {
+    const reponse = await axios.post('https://daara-app.onrender.com/api/auth/google', {
       token: "ceci_est_un_faux_token_google_pour_le_test"
     });
 
