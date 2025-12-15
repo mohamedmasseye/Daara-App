@@ -64,7 +64,7 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error('CORS NOT ALLOWED'));
   },
-  credentials: false,
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -110,7 +110,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 const fileUrl = (req, name) =>
-  name ? `${req.protocol}://${req.get('host')}/uploads/${name}` : null;
+  name ? `https://${req.get('host')}/uploads/${name}` : null;
 
 /* ===============================
    AUTH ROUTES
