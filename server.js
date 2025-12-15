@@ -9,8 +9,12 @@ const multer = require('multer');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+// --- 1. IMPORTS CLOUDINARY ---
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
 // ==========================================
-// 0. CONFIGURATION FIREBASE
+// 0. CONFIGURATION FIREBASE (INCHANGÉ)
 // ==========================================
 const admin = require('firebase-admin');
 try {
@@ -24,21 +28,21 @@ try {
 }
 
 // ==========================================
-// 1. INITIALISATION APP & MIDDLEWARES
+// 1. INITIALISATION APP & MIDDLEWARES (INCHANGÉ)
 // ==========================================
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'daara_secret_key_super_securisee_123';
 
-// Dossier Uploads
+// Le dossier uploads n'est plus critique avec Cloudinary, mais on le garde pour éviter les erreurs
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
-// --- CORRECTION CORS CRITIQUE ---
+// --- CONFIGURATION CORS (INCHANGÉE) ---
 const allowedOrigins = [
-  'https://daaraserignemordiop.vercel.app', // Votre Frontend Vercel
-  'http://localhost:3000',                  // Dev local
-  'http://localhost:5173'                   // Vite dev local
+  'https://daaraserignemordiop.vercel.app', 
+  'http://localhost:3000',                  
+  'http://localhost:5173'                   
 ];
 
 const corsOptions = {
@@ -61,18 +65,29 @@ app.use(express.json());
 app.use('/uploads', express.static(uploadDir));
 
 // ==========================================
-// 2. CONFIGURATION MULTER (Uploads)
+// 2. CONFIGURATION CLOUDINARY (REMPLACE MULTER DISK)
 // ==========================================
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => {
-    const cleanName = file.originalname.replace(/[^a-zA-Z0-9.]/g, "_");
-    cb(null, Date.now() + '-' + cleanName);
-  }
+
+// Config Cloudinary (Assurez-vous d'avoir ces variables dans votre .env sur Render)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
+
+// Storage Engine Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'daara-uploads', // Nom du dossier dans votre Cloudinary
+    allowed_formats: ['jpg', 'png', 'jpeg', 'pdf', 'mp3', 'webp'],
+    resource_type: 'auto', // Important pour accepter PDF et Audio
+  },
+});
+
 const upload = multer({ storage: storage });
 
-// Définitions des uploads spécifiques
+// Définitions des uploads (Inchangé)
 const productUploads = upload.array('productImages', 5);
 const eventUploads = upload.fields([{ name: 'eventImage', maxCount: 1 }, { name: 'eventDocument', maxCount: 1 }]);
 const podcastUploads = upload.fields([{ name: 'audioFile', maxCount: 1 }, { name: 'coverImageFile', maxCount: 1 }]);
@@ -81,16 +96,10 @@ const blogUploads = upload.fields([{ name: 'coverImageFile', maxCount: 1 }, { na
 const mediaUploads = upload.single('mediaFile');
 const avatarUpload = upload.single('avatar');
 
-// --- CORRECTION HTTPS (Mixed Content) ---
-const getFileUrl = (req, filename) => {
-  if (!filename) return null;
-  const host = req.get('host');
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  return `${protocol}://${host}/uploads/${filename}`;
-};
+// NOTE: getFileUrl n'est plus nécessaire car Cloudinary renvoie directement l'URL complète dans req.file.path
 
 // ==========================================
-// 3. IMPORTS DES MODÈLES
+// 3. IMPORTS DES MODÈLES (INCHANGÉ)
 // ==========================================
 const User = require('./models/User');
 const Event = require('./models/Event');
@@ -105,7 +114,7 @@ const Media = require('./models/Media');
 const Notification = require('./models/Notification');
 const Contact = require('./models/Contact');
 
-// Middleware d'authentification
+// Middleware d'authentification (INCHANGÉ)
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -118,7 +127,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ==========================================
-// 4. ROUTES API
+// 4. ROUTES API (ADAPTÉES CLOUDINARY)
 // ==========================================
 
 // --- AUTHENTIFICATION ---
@@ -197,7 +206,8 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
     try {
         const updateData = { ...req.body };
-        if (req.file) updateData.avatar = getFileUrl(req, req.file.filename);
+        // Cloudinary : on utilise req.file.path
+        if (req.file) updateData.avatar = req.file.path;
         const updated = await User.findByIdAndUpdate(req.user.id, updateData, { new: true }).select('-password');
         res.json(updated);
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -293,8 +303,8 @@ app.post('/api/events', eventUploads, async (req, res) => {
         const doc = req.files['eventDocument']?.[0];
         const evt = new Event({
             ...req.body,
-            image: getFileUrl(req, img?.filename),
-            documentUrl: getFileUrl(req, doc?.filename)
+            image: img ? img.path : null, // Cloudinary Path
+            documentUrl: doc ? doc.path : null // Cloudinary Path
         });
         await evt.save();
         res.status(201).json(evt);
@@ -306,8 +316,10 @@ app.put('/api/events/:id', eventUploads, async (req, res) => {
         let updateData = { ...req.body };
         const img = req.files['eventImage']?.[0];
         const doc = req.files['eventDocument']?.[0];
-        if (img) updateData.image = getFileUrl(req, img.filename);
-        if (doc) updateData.documentUrl = getFileUrl(req, doc.filename);
+        // Mise à jour si nouveaux fichiers
+        if (img) updateData.image = img.path;
+        if (doc) updateData.documentUrl = doc.path;
+        
         const updated = await Event.findByIdAndUpdate(req.params.id, updateData, { new: true });
         res.json(updated);
     } catch (err) { res.status(400).json({ error: err.message }); }
@@ -326,7 +338,8 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', productUploads, async (req, res) => {
     try {
-        const imageUrls = (req.files || []).map(f => getFileUrl(req, f.filename));
+        // Cloudinary : array de fichiers, on map sur .path
+        const imageUrls = (req.files || []).map(f => f.path);
         const newProduct = new Product({ ...req.body, images: imageUrls });
         await newProduct.save();
         res.status(201).json(newProduct);
@@ -337,7 +350,7 @@ app.put('/api/products/:id', productUploads, async (req, res) => {
     try {
         let updateData = { ...req.body };
         if (req.files && req.files.length > 0) {
-            updateData.images = req.files.map(f => getFileUrl(req, f.filename));
+            updateData.images = req.files.map(f => f.path);
         }
         const updated = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true });
         res.json(updated);
@@ -361,8 +374,8 @@ app.post('/api/books', bookUploads, async (req, res) => {
         const cover = req.files['coverImage']?.[0];
         const book = new Book({
             ...req.body,
-            pdfUrl: getFileUrl(req, pdf?.filename),
-            coverUrl: getFileUrl(req, cover?.filename)
+            pdfUrl: pdf ? pdf.path : req.body.pdfUrl,
+            coverUrl: cover ? cover.path : null
         });
         await book.save();
         res.status(201).json(book);
@@ -386,8 +399,8 @@ app.post('/api/blog', blogUploads, async (req, res) => {
         const pdf = req.files['pdfDocumentFile']?.[0];
         const post = new BlogPost({
             ...req.body,
-            coverImage: getFileUrl(req, cover?.filename),
-            pdfDocument: getFileUrl(req, pdf?.filename)
+            coverImage: cover ? cover.path : null,
+            pdfDocument: pdf ? pdf.path : null
         });
         await post.save();
         res.status(201).json(post);
@@ -412,8 +425,8 @@ app.post('/api/podcasts', podcastUploads, async (req, res) => {
         if (!audio) return res.status(400).json({ error: "Audio requis" });
         const podcast = new Podcast({
             ...req.body,
-            audioUrl: getFileUrl(req, audio.filename),
-            coverImage: getFileUrl(req, cover?.filename)
+            audioUrl: audio.path,
+            coverImage: cover ? cover.path : null
         });
         await podcast.save();
         res.status(201).json(podcast);
@@ -434,7 +447,7 @@ app.get('/api/media', async (req, res) => {
 app.post('/api/media', mediaUploads, async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "Fichier requis" });
-        const media = new Media({ ...req.body, url: getFileUrl(req, req.file.filename) });
+        const media = new Media({ ...req.body, url: req.file.path });
         await media.save();
         res.status(201).json(media);
     } catch (err) { res.status(400).json({ error: err.message }); }
@@ -501,7 +514,6 @@ app.get('/api/my-tickets', authenticateToken, async (req, res) => {
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ROUTE MANQUANTE PRÉCÉDEMMENT
 app.delete('/api/tickets/:id', authenticateToken, async (req, res) => {
     try { await Ticket.findByIdAndDelete(req.params.id); res.json({ message: "Billet supprimé" }); }
     catch (err) { res.status(500).json({ error: "Erreur suppression billet" }); }
@@ -556,7 +568,8 @@ app.delete('/api/contact/:id', authenticateToken, async (req, res) => {
 app.post('/api/upload', upload.single('file'), (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "Fichier requis" });
-        res.json({ url: getFileUrl(req, req.file.filename) });
+        // Cloudinary path
+        res.json({ url: req.file.path });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
