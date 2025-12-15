@@ -68,7 +68,7 @@ const corsOptions = {
   credentials: true, // IMPORTANT si vous utilisez des cookies ou des sessions
 };
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadDir));
 
