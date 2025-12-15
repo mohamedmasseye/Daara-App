@@ -68,7 +68,7 @@ const corsOptions = {
   credentials: true, // IMPORTANT si vous utilisez des cookies ou des sessions
 };
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use('/uploads', express.static(uploadDir));
 
@@ -109,8 +109,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Utilitaire URL Fichier
-const getFileUrl = (req, filename) => filename ? `${req.protocol}://${req.get('host')}/uploads/${filename}` : null;
-
+const getFileUrl = (req, filename) => filename ? `https://${req.get('host')}/uploads/${filename}` : null;
 // ==========================================
 // 3. ROUTES API
 // ==========================================
