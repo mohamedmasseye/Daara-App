@@ -55,7 +55,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'daara_secret_key';
 ================================ */
 const allowedOrigins = [
   'https://daaraserignemordiop.vercel.app',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:5000'
 ];
 
 app.use(cors({
