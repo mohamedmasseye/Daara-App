@@ -50,6 +50,23 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
 // Middlewares
+const allowedOrigins = [
+  'https://daarassmd.vercel.app/', // REMPLACEZ CETTE VALEUR PAR VOTRE VRAIE URL VERCEL
+  'http://localhost:3000',                  // Utile pour vos tests locaux
+  'http://localhost:5000'                   // Utile si le front est sur 5000
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Autoriser les origines dans la liste, ou s'il n'y a pas d'origine (mobile, Postman)
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials: true, // IMPORTANT si vous utilisez des cookies ou des sessions
+};
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors());
 app.use(express.json());
