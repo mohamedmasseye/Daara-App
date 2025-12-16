@@ -17,14 +17,26 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 // 0. CONFIGURATION FIREBASE (INCHANGÉ)
 // ==========================================
 const admin = require('firebase-admin');
+
 try {
-  const serviceAccount = require('./serviceAccountKey.json');
+  let serviceAccount;
+
+  // CAS 1 : Sur Render (On lit la variable d'environnement sécurisée)
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // Render stocke le JSON sous forme de texte, on le transforme en objet
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } 
+  // CAS 2 : En local sur votre PC (On lit le fichier)
+  else {
+    serviceAccount = require('./serviceAccountKey.json');
+  }
+
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });
   console.log("🔥 Firebase Admin connecté !");
 } catch (error) {
-  console.log("⚠️ Firebase non activé (fichier clé manquant).");
+  console.log("⚠️ Firebase non activé :", error.message);
 }
 
 // ==========================================
