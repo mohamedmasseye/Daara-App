@@ -475,6 +475,30 @@ app.post('/api/blog', blogUploads, async (req, res) => {
     } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+app.put('/api/blog/:id', authenticateToken, blogUploads, async (req, res) => {
+    try {
+        const post = await BlogPost.findById(req.params.id);
+        if(!post) return res.status(404).json({error: "Article introuvable"});
+
+        // Mise à jour des champs texte
+        post.title = req.body.title || post.title;
+        post.summary = req.body.summary || post.summary;
+        post.content = req.body.content || post.content;
+        post.category = req.body.category || post.category;
+        post.author = req.body.author || post.author;
+
+        // Mise à jour fichiers UNIQUEMENT si envoyés
+        const cover = req.files['coverImageFile']?.[0];
+        const pdf = req.files['pdfDocumentFile']?.[0];
+
+        if (cover) post.coverImage = cover.path; // Cloudinary
+        if (pdf) post.pdfDocument = pdf.path;   // Cloudinary
+
+        await post.save();
+        res.json(post);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete('/api/blog/:id', authenticateToken, async (req, res) => {
     try { await BlogPost.findByIdAndDelete(req.params.id); res.json({ message: "Supprimé" }); }
     catch (err) { res.status(500).json({ error: err.message }); }
