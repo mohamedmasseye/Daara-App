@@ -423,6 +423,39 @@ app.delete('/api/books/:id', authenticateToken, async (req, res) => {
 });
 
 // --- BLOG ---
+
+app.put('/api/blog/:id/like', async (req, res) => {
+  try {
+    // On cherche l'article et on incrémente les likes
+    const post = await BlogPost.findByIdAndUpdate(
+      req.params.id, 
+      { $inc: { likes: 1 } }, // $inc est une commande Mongo pour ajouter +1
+      { new: true } // On renvoie la version mise à jour
+    );
+    res.json(post);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// 2. ROUTE POUR COMMENTER
+app.post('/api/blog/:id/comment', async (req, res) => {
+  try {
+    const { author, content } = req.body;
+    
+    // On cherche l'article
+    const post = await BlogPost.findById(req.params.id);
+    if (!post) return res.status(404).json({ error: "Article introuvable" });
+    
+    // On ajoute le commentaire au début du tableau (unshift)
+    post.comments.unshift({
+      author,
+      content,
+      date: new Date()
+    });
+    
+    await post.save();
+    res.json(post);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/blog', async (req, res) => {
     try { const posts = await BlogPost.find().sort({ createdAt: -1 }); res.json(posts); }
     catch (err) { res.status(500).json({ error: err.message }); }
