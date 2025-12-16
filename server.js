@@ -113,6 +113,7 @@ const Book = require('./models/Book');
 const Media = require('./models/Media');
 const Notification = require('./models/Notification');
 const Contact = require('./models/Contact');
+const HomeContent = require('./models/HomeContent');
 
 // Middleware d'authentification (INCHANGÉ)
 const authenticateToken = (req, res, next) => {
@@ -328,6 +329,29 @@ app.put('/api/events/:id', eventUploads, async (req, res) => {
 app.delete('/api/events/:id', authenticateToken, async (req, res) => {
     try { await Event.findByIdAndDelete(req.params.id); res.json({ message: "Supprimé" }); }
     catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET: Récupérer le contenu (Public)
+app.get('/api/home-content', async (req, res) => {
+  try {
+    let content = await HomeContent.findOne();
+    if (!content) {
+      // Si vide, on renvoie un objet vide, le front utilisera ses défauts
+      return res.json({}); 
+    }
+    res.json(content);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST: Mettre à jour (Admin)
+app.post('/api/home-content', authenticateToken, async (req, res) => {
+  try {
+    // On supprime tout et on remplace par le nouveau (plus simple pour une config unique)
+    await HomeContent.deleteMany({});
+    const newContent = new HomeContent(req.body);
+    await newContent.save();
+    res.json(newContent);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // --- PRODUCTS ---
