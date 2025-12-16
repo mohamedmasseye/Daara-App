@@ -54,7 +54,10 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 const allowedOrigins = [
   'https://daaraserignemordiop.vercel.app', 
   'http://localhost:3000',                  
-  'http://localhost:5173'                   
+  'http://localhost:5173',
+  'https://localhost',       // <--- AJOUT CRUCIAL (C'est lui qui bloquait dans vos logs)
+  'capacitor://localhost',   // <--- AJOUT CONSEILLÉ (Pour les builds natifs futurs)
+  'http://localhost'         // <--- AJOUT SÉCURITÉ (Pour certains émulateurs Android)
 ];
 
 const corsOptions = {
