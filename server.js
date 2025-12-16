@@ -346,12 +346,17 @@ app.get('/api/home-content', async (req, res) => {
 // POST: Mettre à jour (Admin)
 app.post('/api/home-content', authenticateToken, async (req, res) => {
   try {
-    // On supprime tout et on remplace par le nouveau (plus simple pour une config unique)
+    // On supprime l'ancienne config pour ne garder que la nouvelle (Single Document Pattern)
     await HomeContent.deleteMany({});
+    
     const newContent = new HomeContent(req.body);
     await newContent.save();
-    res.json(newContent);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    
+    res.status(201).json(newContent);
+  } catch (err) {
+    console.error("Erreur save home:", err);
+    res.status(500).json({ error: "Impossible de sauvegarder le contenu." });
+  }
 });
 
 // --- PRODUCTS ---
