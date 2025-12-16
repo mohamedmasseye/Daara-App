@@ -38,7 +38,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'daara_secret_key_super_securisee_1
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
-// --- CONFIGURATION CORS (INCHANGÉE) ---
+// --- CONFIGURATION CORS (CORRIGÉE & ROBUSTE) ---
 const allowedOrigins = [
   'https://daaraserignemordiop.vercel.app', 
   'http://localhost:3000',                  
@@ -47,12 +47,18 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log("Bloqué par CORS:", origin);
-      callback(new Error('Not allowed by CORS'));
-    }
+    // 1. Autoriser les outils sans origine (Mobile, Postman)
+    if (!origin) return callback(null, true);
+    
+    // 2. Autoriser les origines explicitement listées
+    if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+    
+    // 3. ✅ NOUVEAU : Autoriser TOUTES les sous-domaines Vercel (pour les tests et previews)
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+
+    // Sinon, on bloque et on loggue l'erreur pour comprendre
+    console.log("🚫 Bloqué par CORS:", origin);
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -603,10 +609,11 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 });
 
 // ==========================================
-// 5. DÉMARRAGE DU SERVEUR
+// 5. DÉMARRAGE DU SERVEUR (CORRIGÉ & ROBUSTE)
 // ==========================================
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://mohamedmasseye_db_user:Kmd789415!@cluster0.1clqeei.mongodb.net/daaraserignemordiop?retryWrites=true&w=majority&appName=Cluster0';
 
+// 1. On lance la connexion DB
 mongoose.connect(MONGODB_URI)
   .then(async () => {
     console.log('✅ Connecté à MongoDB ATLAS (En ligne)');
@@ -621,9 +628,11 @@ mongoose.connect(MONGODB_URI)
             console.log("🎉 ADMIN CRÉÉ ! Email: admin@daara.com / Pass: password123");
         }
     } catch (e) { console.error("Erreur admin auto:", e); }
-    
-    app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Serveur en ligne sur le port ${PORT}`));
   })
   .catch(err => {
       console.error('❌ Erreur critique MongoDB:', err);
   });
+
+// 2. IMPORTANT : On démarre le serveur IMMÉDIATEMENT, sans attendre la DB
+// Cela permet à Render de détecter que le service est "Live" et évite les 404
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Serveur en ligne sur le port ${PORT}`));
