@@ -366,27 +366,65 @@ app.post('/api/home-content', authenticateToken, async (req, res) => {
 });
 
 // --- PRODUCTS ---
+// --- PRODUCTS ---
+
 app.get('/api/products', async (req, res) => {
-    try { const products = await Product.find().populate('category').sort({ createdAt: -1 }); res.json(products); }
-    catch (err) { res.status(500).json({ error: err.message }); }
+    try { 
+        const products = await Product.find().populate('category').sort({ createdAt: -1 }); 
+        res.json(products); 
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/products', productUploads, async (req, res) => {
+// ✅ AJOUT : Parsing des tailles/couleurs + Sécurité (authenticateToken)
+app.post('/api/products', authenticateToken, productUploads, async (req, res) => {
     try {
-        // Cloudinary : array de fichiers, on map sur .path
+        // Cloudinary
         const imageUrls = (req.files || []).map(f => f.path);
-        const newProduct = new Product({ ...req.body, images: imageUrls });
+        
+        // On récupère les données
+        let { sizes, colors, ...productData } = req.body;
+
+        // IMPORTANTE CORRECTION : Conversion des chaînes JSON en tableaux réels
+        if (sizes && typeof sizes === 'string') {
+            try { sizes = JSON.parse(sizes); } catch(e) { sizes = []; }
+        }
+        if (colors && typeof colors === 'string') {
+            try { colors = JSON.parse(colors); } catch(e) { colors = []; }
+        }
+
+        const newProduct = new Product({ 
+            ...productData, 
+            sizes: sizes || [], 
+            colors: colors || [], 
+            images: imageUrls 
+        });
+        
         await newProduct.save();
         res.status(201).json(newProduct);
-    } catch (err) { res.status(400).json({ error: err.message }); }
+    } catch (err) { 
+        console.error(err);
+        res.status(400).json({ error: err.message }); 
+    }
 });
 
-app.put('/api/products/:id', productUploads, async (req, res) => {
+// ✅ MODIFICATION : Même logique pour l'update
+app.put('/api/products/:id', authenticateToken, productUploads, async (req, res) => {
     try {
-        let updateData = { ...req.body };
+        let { sizes, colors, ...updateData } = req.body;
+
+        // Conversion JSON string -> Array
+        if (sizes && typeof sizes === 'string') {
+            try { updateData.sizes = JSON.parse(sizes); } catch(e) {}
+        }
+        if (colors && typeof colors === 'string') {
+            try { updateData.colors = JSON.parse(colors); } catch(e) {}
+        }
+
+        // Si nouvelles images, on remplace (ou on ajoute selon votre logique, ici on remplace)
         if (req.files && req.files.length > 0) {
             updateData.images = req.files.map(f => f.path);
         }
+        
         const updated = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true });
         res.json(updated);
     } catch (err) { res.status(400).json({ error: err.message }); }
