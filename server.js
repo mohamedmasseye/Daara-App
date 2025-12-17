@@ -52,12 +52,20 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
 // --- CONFIGURATION CORS (CORRIGÉE & ROBUSTE) ---
 const allowedOrigins = [
-  'https://daaraserignemordiop.vercel.app', 
-  'http://localhost:3000',                  
+  // 1. L'adresse de votre nouveau Frontend sur Coolify (OBLIGATOIRE)
+  'http://pok408wwkw084ckk0ogscsgw.91.99.200.188.sslip.io', 
+
+  // 2. Pour votre application Mobile (Android/iOS) - NE PAS ENLEVER
+  'capacitor://localhost',
+  'http://localhost',
+  'https://localhost',
+
+  // 3. Pour vos tests en local sur votre ordinateur
+  'http://localhost:3000',
   'http://localhost:5173',
-  'https://localhost',       // <--- AJOUT CRUCIAL (C'est lui qui bloquait dans vos logs)
-  'capacitor://localhost',   // <--- AJOUT CONSEILLÉ (Pour les builds natifs futurs)
-  'http://localhost'         // <--- AJOUT SÉCURITÉ (Pour certains émulateurs Android)
+  
+  // 4. (Optionnel) Votre ancien site Vercel si vous voulez qu'il marche encore
+  'https://daaraserignemordiop.vercel.app'
 ];
 
 const corsOptions = {
