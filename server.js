@@ -729,8 +729,7 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 // ==========================================
 // 5. DÉMARRAGE DU SERVEUR (CORRIGÉ & ROBUSTE)
 // ==========================================
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://mohamedmasseye_db_user:Kmd789415!@cluster0.1clqeei.mongodb.net/daaraserignemordiop?retryWrites=true&w=majority&appName=Cluster0';
-
+const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 // 1. On lance la connexion DB
 mongoose.connect(MONGODB_URI)
   .then(async () => {
