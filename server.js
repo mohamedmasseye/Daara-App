@@ -19,24 +19,32 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const admin = require('firebase-admin');
 
 try {
-  let serviceAccount;
-
-  // CAS 1 : Sur Render (On lit la variable d'environnement sécurisée)
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    // Render stocke le JSON sous forme de texte, on le transforme en objet
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  } 
-  // CAS 2 : En local sur votre PC (On lit le fichier)
-  else {
-    serviceAccount = require('./serviceAccountKey.json');
-  }
+    // Nettoyage radical des caractères d'échappement accidentels
+    let rawData = process.env.FIREBASE_SERVICE_ACCOUNT;
+    
+    // Si la chaîne commence et finit par des guillemets inutiles, on les retire
+    if (rawData.startsWith('"') && rawData.endsWith('"')) {
+      rawData = rawData.substring(1, rawData.length - 1);
+    }
 
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-  console.log("🔥 Firebase Admin connecté !");
+    // On traite les doubles backslashes qui causent votre erreur actuelle
+    const formattedData = rawData.replace(/\\"/g, '"').replace(/\\\\n/g, '\\n');
+    
+    const serviceAccount = JSON.parse(formattedData);
+
+    // Correction spécifique pour la clé privée Google
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    console.log("🔥 Firebase Admin connecté avec succès !");
+  }
 } catch (error) {
-  console.log("⚠️ Firebase non activé :", error.message);
+  console.log("⚠️ Erreur de parsing JSON Firebase :", error.message);
 }
 
 // ==========================================
