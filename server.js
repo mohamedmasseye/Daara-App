@@ -719,12 +719,14 @@ app.delete('/api/contact/:id', authenticateToken, async (req, res) => {
 });
 
 // --- UPLOAD GÉNÉRIQUE (Admin Home) ---
-app.post('/api/upload', upload.single('file'), (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: "Fichier requis" });
-        // Cloudinary path
-        res.json({ url: req.file.path });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "Fichier requis" });
+    res.json({ url: req.file.path });
+  } catch (err) {
+    console.error("Erreur Upload:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ==========================================
