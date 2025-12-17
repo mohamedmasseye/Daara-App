@@ -133,7 +133,12 @@ const corsOptions = {
 };
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: '*', 
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  credentials: true
+}));
 app.use(express.json());
 app.use('/uploads', express.static(uploadDir));
 
