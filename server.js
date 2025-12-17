@@ -20,20 +20,19 @@ const admin = require('firebase-admin');
 
 try {
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    // Nettoyage radical des caractères d'échappement accidentels
-    let rawData = process.env.FIREBASE_SERVICE_ACCOUNT;
-    
-    // Si la chaîne commence et finit par des guillemets inutiles, on les retire
-    if (rawData.startsWith('"') && rawData.endsWith('"')) {
-      rawData = rawData.substring(1, rawData.length - 1);
+    let rawData = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+    let serviceAccount;
+
+    // Si la donnée ressemble à du Base64 (pas de '{' au début)
+    if (!rawData.startsWith('{')) {
+      const buffer = Buffer.from(rawData, 'base64');
+      serviceAccount = JSON.parse(buffer.toString('utf-8'));
+    } else {
+      // Sinon on tente le parse normal
+      serviceAccount = JSON.parse(rawData);
     }
 
-    // On traite les doubles backslashes qui causent votre erreur actuelle
-    const formattedData = rawData.replace(/\\"/g, '"').replace(/\\\\n/g, '\\n');
-    
-    const serviceAccount = JSON.parse(formattedData);
-
-    // Correction spécifique pour la clé privée Google
+    // Correction de la clé privée pour les sauts de ligne
     if (serviceAccount.private_key) {
       serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
     }
@@ -41,10 +40,10 @@ try {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
-    console.log("🔥 Firebase Admin connecté avec succès !");
+    console.log("🔥 Firebase Admin connecté via Base64 !");
   }
 } catch (error) {
-  console.log("⚠️ Erreur de parsing JSON Firebase :", error.message);
+  console.log("⚠️ Erreur Firebase finale :", error.message);
 }
 
 // ==========================================
