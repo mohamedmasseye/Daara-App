@@ -53,7 +53,8 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 // --- CONFIGURATION CORS (CORRIGÉE & ROBUSTE) ---
 const allowedOrigins = [
   // 1. L'adresse de votre nouveau Frontend sur Coolify (OBLIGATOIRE)
-  'http://pok408wwkw084ckk0ogscsgw.91.99.200.188.sslip.io', 
+  'http://pok408wwkw084ckk0ogscsgw.91.99.200.188.sslip.io',
+  'https://pok408wwkw084ckk0ogscsgw.91.99.200.188.sslip.io',
 
   // 2. Pour votre application Mobile (Android/iOS) - NE PAS ENLEVER
   'capacitor://localhost',
