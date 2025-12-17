@@ -18,21 +18,45 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 // ==========================================
 const admin = require('firebase-admin');
 
+// ==========================================
+// CONFIGURATION FIREBASE (CODE ROBUSTE)
+// ==========================================
 try {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    let rawData = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
-    let serviceAccount;
+  let serviceAccount;
+  let rawData = process.env.FIREBASE_SERVICE_ACCOUNT;
 
-    // Si la donnée ressemble à du Base64 (pas de '{' au début)
-    if (!rawData.startsWith('{')) {
-      const buffer = Buffer.from(rawData, 'base64');
-      serviceAccount = JSON.parse(buffer.toString('utf-8'));
-    } else {
-      // Sinon on tente le parse normal
-      serviceAccount = JSON.parse(rawData);
+  if (rawData) {
+    // 1. Nettoyage préliminaire des espaces
+    rawData = rawData.trim();
+
+    // 2. Si Coolify a entouré le tout de guillemets, on les enlève
+    if (rawData.startsWith('"') && rawData.endsWith('"')) {
+      rawData = rawData.slice(1, -1);
     }
 
-    // Correction de la clé privée pour les sauts de ligne
+    // 3. Détection BASE64 (Si ça ne commence pas par une accolade '{')
+    if (!rawData.startsWith('{')) {
+      try {
+        const buffer = Buffer.from(rawData, 'base64');
+        const decoded = buffer.toString('utf-8');
+        // Si le décodage ressemble à du JSON, on l'utilise
+        if (decoded.startsWith('{')) {
+           rawData = decoded;
+        }
+      } catch (e) {
+        // Ce n'était pas du Base64 valide, on continue avec le texte brut
+      }
+    }
+
+    // 4. NETTOYAGE CRITIQUE : Suppression des échappements (\") ajoutés par Coolify
+    // On remplace les \" par " et les \\n par \n
+    rawData = rawData.replace(/\\"/g, '"');
+    rawData = rawData.replace(/\\\\n/g, '\\n');
+    
+    // 5. Parse final
+    serviceAccount = JSON.parse(rawData);
+
+    // 6. Correction ultime de la clé privée (sauts de ligne)
     if (serviceAccount.private_key) {
       serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
     }
@@ -40,12 +64,24 @@ try {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
-    console.log("🔥 Firebase Admin connecté via Base64 !");
+    console.log("🔥 Firebase Admin connecté avec succès !");
+    
+  } else {
+    // Cas Local (PC)
+    serviceAccount = require('./serviceAccountKey.json');
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    console.log("💻 Firebase Admin connecté en local.");
   }
-} catch (error) {
-  console.log("⚠️ Erreur Firebase finale :", error.message);
-}
 
+} catch (error) {
+  console.log("⚠️ Erreur Firebase :", error.message);
+  // Affiche les 20 premiers caractères pour aider au debug si ça plante encore
+  if(process.env.FIREBASE_SERVICE_ACCOUNT) {
+      console.log("Début du contenu reçu :", process.env.FIREBASE_SERVICE_ACCOUNT.substring(0, 20));
+  }
+}
 // ==========================================
 // 1. INITIALISATION APP & MIDDLEWARES (INCHANGÉ)
 // ==========================================
