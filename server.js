@@ -693,10 +693,34 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
         await newNotif.save();
         
         if (admin.apps.length) {
-            admin.messaging().send({ notification: { title, body }, topic: 'all_users' })
-                .then(r => console.log('✈️ Push envoyé:', r))
-                .catch(e => console.log('⚠️ Erreur Push:', e.message));
-        }
+    const message = {
+        notification: { 
+            title, 
+            body 
+        },
+        // Configuration spécifique Android
+        android: {
+            notification: {
+                icon: 'ic_stat_notify', // Nom du fichier sans .png
+                color: '#D4AF37',       // VOTRE COULEUR DORÉE ICI (Hex code)
+                sound: 'default'
+            }
+        },
+        // Configuration spécifique iOS (Optionnel)
+        apns: {
+            payload: {
+                aps: {
+                    sound: 'default'
+                }
+            }
+        },
+        topic: 'all_users'
+    };
+
+    admin.messaging().send(message)
+        .then(r => console.log('✈️ Push envoyé avec icône:', r))
+        .catch(e => console.log('⚠️ Erreur Push:', e.message));
+}
         res.status(201).json(newNotif);
     } catch (err) { res.status(400).json({ error: err.message }); }
 });
