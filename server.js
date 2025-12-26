@@ -103,6 +103,7 @@ const allowedOrigins = [
   'capacitor://localhost',
   'http://localhost',
   'https://localhost',
+  'http://91.99.200.188:5000',
 
   // 3. Pour vos tests en local sur votre ordinateur
   'http://localhost:3000',
@@ -114,16 +115,14 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // 1. Autoriser les outils sans origine (Mobile, Postman)
+    // Autoriser les requêtes sans origine (comme l'app mobile parfois ou Postman)
     if (!origin) return callback(null, true);
     
-    // 2. Autoriser les origines explicitement listées
-    if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+    // Vérification de la liste
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.startsWith('http://localhost')) {
+      return callback(null, true);
+    }
     
-    // 3. ✅ NOUVEAU : Autoriser TOUTES les sous-domaines Vercel (pour les tests et previews)
-    if (origin.endsWith('.vercel.app')) return callback(null, true);
-
-    // Sinon, on bloque et on loggue l'erreur pour comprendre
     console.log("🚫 Bloqué par CORS:", origin);
     callback(new Error('Not allowed by CORS'));
   },
