@@ -103,7 +103,7 @@ const allowedOrigins = [
   'capacitor://localhost',
   'http://localhost',
   'https://localhost',
-  'http://91.99.200.188:3000',
+  'http://91.99.200.188:5000',
 
   // 3. Pour vos tests en local sur votre ordinateur
   'http://localhost:3000',
