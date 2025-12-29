@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { OAuth2Client } = require('google-auth-library');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -17,6 +18,7 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 // 0. CONFIGURATION FIREBASE (INCHANGÉ)
 // ==========================================
 const admin = require('firebase-admin');
+
 
 // ==========================================
 // CONFIGURATION FIREBASE (CODE ROBUSTE)
@@ -270,6 +272,62 @@ app.post('/api/auth/google', async (req, res) => {
         res.status(401).json({ error: "Auth Google échouée" });
     }
 });
+
+// ==========================================
+// 🔐 AUTH GOOGLE - MOBILE (ANDROID / IOS)
+// ==========================================
+const googleClient = new OAuth2Client(process.env.GOOGLE_WEB_CLIENT_ID);
+
+app.post('/api/auth/google-mobile', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ error: "idToken manquant" });
+    }
+
+    // Vérification du token Google natif
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_WEB_CLIENT_ID
+    });
+
+    const payload = ticket.getPayload();
+    const { sub, email, name, picture } = payload;
+
+    let user = await User.findOne({
+      $or: [{ googleId: sub }, { email }]
+    });
+
+    if (!user) {
+      user = new User({
+        fullName: name || "Utilisateur Google",
+        email,
+        googleId: sub,
+        avatar: picture,
+        authProvider: 'google',
+        role: 'user'
+      });
+      await user.save();
+    } else {
+      if (!user.googleId) user.googleId = sub;
+      if (!user.avatar && picture) user.avatar = picture;
+      await user.save();
+    }
+
+    const appToken = jwt.sign(
+      { id: user._id },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({ token: appToken, user });
+
+  } catch (err) {
+    console.error("❌ Google Mobile Auth Error:", err.message);
+    res.status(401).json({ error: "Auth Google mobile échouée" });
+  }
+});
+
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
     try { const user = await User.findById(req.user.id).select('-password'); res.json(user); }
