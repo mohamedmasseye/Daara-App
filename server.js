@@ -28,37 +28,35 @@ try {
   let rawData = process.env.FIREBASE_SERVICE_ACCOUNT;
 
   if (rawData) {
-    // 1. Nettoyage préliminaire des espaces
+    // 1. Nettoyage préliminaire
     rawData = rawData.trim();
 
-    // 2. Si Coolify a entouré le tout de guillemets, on les enlève
+    // 2. Si Coolify a entouré le tout de guillemets
     if (rawData.startsWith('"') && rawData.endsWith('"')) {
       rawData = rawData.slice(1, -1);
     }
 
-    // 3. Détection BASE64 (Si ça ne commence pas par une accolade '{')
+    // 3. Détection BASE64
     if (!rawData.startsWith('{')) {
       try {
         const buffer = Buffer.from(rawData, 'base64');
         const decoded = buffer.toString('utf-8');
-        // Si le décodage ressemble à du JSON, on l'utilise
         if (decoded.startsWith('{')) {
            rawData = decoded;
         }
       } catch (e) {
-        // Ce n'était pas du Base64 valide, on continue avec le texte brut
+        // Continue avec le texte brut
       }
     }
 
-    // 4. NETTOYAGE CRITIQUE : Suppression des échappements (\") ajoutés par Coolify
-    // On remplace les \" par " et les \\n par \n
+    // 4. NETTOYAGE CRITIQUE
     rawData = rawData.replace(/\\"/g, '"');
     rawData = rawData.replace(/\\\\n/g, '\\n');
     
     // 5. Parse final
     serviceAccount = JSON.parse(rawData);
 
-    // 6. Correction ultime de la clé privée (sauts de ligne)
+    // 6. Correction clé privée
     if (serviceAccount.private_key) {
       serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
     }
@@ -69,7 +67,7 @@ try {
     console.log("🔥 Firebase Admin connecté avec succès !");
     
   } else {
-    // Cas Local (PC)
+    // Cas Local
     serviceAccount = require('./serviceAccountKey.json');
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
@@ -79,52 +77,40 @@ try {
 
 } catch (error) {
   console.log("⚠️ Erreur Firebase :", error.message);
-  // Affiche les 20 premiers caractères pour aider au debug si ça plante encore
   if(process.env.FIREBASE_SERVICE_ACCOUNT) {
       console.log("Début du contenu reçu :", process.env.FIREBASE_SERVICE_ACCOUNT.substring(0, 20));
   }
 }
+
 // ==========================================
-// 1. INITIALISATION APP & MIDDLEWARES (INCHANGÉ)
+// 1. INITIALISATION APP & MIDDLEWARES
 // ==========================================
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'daara_secret_key_super_securisee_123';
 
-// Le dossier uploads n'est plus critique avec Cloudinary, mais on le garde pour éviter les erreurs
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
-// --- CONFIGURATION CORS (CORRIGÉE & ROBUSTE) ---
+// --- CONFIGURATION CORS ---
 const allowedOrigins = [
-  // 1. L'adresse de votre nouveau Frontend sur Coolify (OBLIGATOIRE)
   'http://pok408wwkw084ckk0ogscsgw.91.99.200.188.sslip.io',
   'https://pok408wwkw084ckk0ogscsgw.91.99.200.188.sslip.io',
-
-  // 2. Pour votre application Mobile (Android/iOS) - NE PAS ENLEVER
   'capacitor://localhost',
   'http://localhost',
   'https://localhost',
   'http://91.99.200.188:5000',
-
-  // 3. Pour vos tests en local sur votre ordinateur
   'http://localhost:3000',
   'http://localhost:5173',
-  
-  // 4. (Optionnel) Votre ancien site Vercel si vous voulez qu'il marche encore
   'https://daaraserignemordiop.vercel.app'
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Autoriser les requêtes sans origine (comme l'app mobile parfois ou Postman)
     if (!origin) return callback(null, true);
-    
-    // Vérification de la liste
     if (allowedOrigins.indexOf(origin) !== -1 || origin.startsWith('http://localhost')) {
       return callback(null, true);
     }
-    
     console.log("🚫 Bloqué par CORS:", origin);
     callback(new Error('Not allowed by CORS'));
   },
@@ -135,33 +121,33 @@ const corsOptions = {
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors(corsOptions));
-app.use(express.json());
+
+// ✅ MODIFICATION CRUCIALE ICI : Augmentation de la limite à 50MB
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
 app.use('/uploads', express.static(uploadDir));
 
 // ==========================================
-// 2. CONFIGURATION CLOUDINARY (REMPLACE MULTER DISK)
+// 2. CONFIGURATION CLOUDINARY
 // ==========================================
-
-// Config Cloudinary (Assurez-vous d'avoir ces variables dans votre .env sur Render)
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Storage Engine Cloudinary
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'daara-uploads', // Nom du dossier dans votre Cloudinary
+    folder: 'daara-uploads',
     allowed_formats: ['jpg', 'png', 'jpeg', 'pdf', 'mp3', 'webp'],
-    resource_type: 'auto', // Important pour accepter PDF et Audio
+    resource_type: 'auto',
   },
 });
 
 const upload = multer({ storage: storage });
 
-// Définitions des uploads (Inchangé)
 const productUploads = upload.array('productImages', 5);
 const eventUploads = upload.fields([{ name: 'eventImage', maxCount: 1 }, { name: 'eventDocument', maxCount: 1 }]);
 const podcastUploads = upload.fields([{ name: 'audioFile', maxCount: 1 }, { name: 'coverImageFile', maxCount: 1 }]);
@@ -170,10 +156,8 @@ const blogUploads = upload.fields([{ name: 'coverImageFile', maxCount: 1 }, { na
 const mediaUploads = upload.single('mediaFile');
 const avatarUpload = upload.single('avatar');
 
-// NOTE: getFileUrl n'est plus nécessaire car Cloudinary renvoie directement l'URL complète dans req.file.path
-
 // ==========================================
-// 3. IMPORTS DES MODÈLES (INCHANGÉ)
+// 3. IMPORTS DES MODÈLES
 // ==========================================
 const User = require('./models/User');
 const Event = require('./models/Event');
@@ -189,7 +173,6 @@ const Notification = require('./models/Notification');
 const Contact = require('./models/Contact');
 const HomeContent = require('./models/HomeContent');
 
-// Middleware d'authentification (INCHANGÉ)
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -202,7 +185,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ==========================================
-// 4. ROUTES API (ADAPTÉES CLOUDINARY)
+// 4. ROUTES API
 // ==========================================
 
 // --- AUTHENTIFICATION ---
@@ -273,19 +256,14 @@ app.post('/api/auth/google', async (req, res) => {
     }
 });
 
-// ==========================================
-// 🔐 AUTH GOOGLE - MOBILE (ANDROID / IOS)
-// ==========================================
+// --- GOOGLE MOBILE ---
 const googleClient = new OAuth2Client(process.env.GOOGLE_WEB_CLIENT_ID);
 
 app.post('/api/auth/google-mobile', async (req, res) => {
   try {
     const { idToken } = req.body;
-    if (!idToken) {
-      return res.status(400).json({ error: "idToken manquant" });
-    }
+    if (!idToken) return res.status(400).json({ error: "idToken manquant" });
 
-    // Vérification du token Google natif
     const ticket = await googleClient.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_WEB_CLIENT_ID
@@ -294,18 +272,13 @@ app.post('/api/auth/google-mobile', async (req, res) => {
     const payload = ticket.getPayload();
     const { sub, email, name, picture } = payload;
 
-    let user = await User.findOne({
-      $or: [{ googleId: sub }, { email }]
-    });
+    let user = await User.findOne({ $or: [{ googleId: sub }, { email }] });
 
     if (!user) {
       user = new User({
         fullName: name || "Utilisateur Google",
-        email,
-        googleId: sub,
-        avatar: picture,
-        authProvider: 'google',
-        role: 'user'
+        email, googleId: sub, avatar: picture,
+        authProvider: 'google', role: 'user'
       });
       await user.save();
     } else {
@@ -314,12 +287,7 @@ app.post('/api/auth/google-mobile', async (req, res) => {
       await user.save();
     }
 
-    const appToken = jwt.sign(
-      { id: user._id },
-      JWT_SECRET,
-      { expiresIn: '30d' }
-    );
-
+    const appToken = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ token: appToken, user });
 
   } catch (err) {
@@ -327,7 +295,6 @@ app.post('/api/auth/google-mobile', async (req, res) => {
     res.status(401).json({ error: "Auth Google mobile échouée" });
   }
 });
-
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
     try { const user = await User.findById(req.user.id).select('-password'); res.json(user); }
@@ -337,14 +304,13 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
     try {
         const updateData = { ...req.body };
-        // Cloudinary : on utilise req.file.path
         if (req.file) updateData.avatar = req.file.path;
         const updated = await User.findByIdAndUpdate(req.user.id, updateData, { new: true }).select('-password');
         res.json(updated);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- GESTION UTILISATEURS (ADMIN) ---
+// --- GESTION UTILISATEURS ---
 app.get('/api/users', authenticateToken, async (req, res) => {
     try { const users = await User.find().select('-password').sort({ createdAt: -1 }); res.json(users); } 
     catch (err) { res.status(500).json({ error: err.message }); }
@@ -434,8 +400,8 @@ app.post('/api/events', eventUploads, async (req, res) => {
         const doc = req.files['eventDocument']?.[0];
         const evt = new Event({
             ...req.body,
-            image: img ? img.path : null, // Cloudinary Path
-            documentUrl: doc ? doc.path : null // Cloudinary Path
+            image: img ? img.path : null,
+            documentUrl: doc ? doc.path : null
         });
         await evt.save();
         res.status(201).json(evt);
@@ -447,7 +413,6 @@ app.put('/api/events/:id', eventUploads, async (req, res) => {
         let updateData = { ...req.body };
         const img = req.files['eventImage']?.[0];
         const doc = req.files['eventDocument']?.[0];
-        // Mise à jour si nouveaux fichiers
         if (img) updateData.image = img.path;
         if (doc) updateData.documentUrl = doc.path;
         
@@ -461,27 +426,20 @@ app.delete('/api/events/:id', authenticateToken, async (req, res) => {
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET: Récupérer le contenu (Public)
+// --- HOME CONTENT ---
 app.get('/api/home-content', async (req, res) => {
   try {
     let content = await HomeContent.findOne();
-    if (!content) {
-      // Si vide, on renvoie un objet vide, le front utilisera ses défauts
-      return res.json({}); 
-    }
+    if (!content) return res.json({}); 
     res.json(content);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST: Mettre à jour (Admin)
 app.post('/api/home-content', authenticateToken, async (req, res) => {
   try {
-    // On supprime l'ancienne config pour ne garder que la nouvelle (Single Document Pattern)
     await HomeContent.deleteMany({});
-    
     const newContent = new HomeContent(req.body);
     await newContent.save();
-    
     res.status(201).json(newContent);
   } catch (err) {
     console.error("Erreur save home:", err);
@@ -490,8 +448,6 @@ app.post('/api/home-content', authenticateToken, async (req, res) => {
 });
 
 // --- PRODUCTS ---
-// --- PRODUCTS ---
-
 app.get('/api/products', async (req, res) => {
     try { 
         const products = await Product.find().populate('category').sort({ createdAt: -1 }); 
@@ -499,16 +455,11 @@ app.get('/api/products', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ✅ AJOUT : Parsing des tailles/couleurs + Sécurité (authenticateToken)
 app.post('/api/products', authenticateToken, productUploads, async (req, res) => {
     try {
-        // Cloudinary
         const imageUrls = (req.files || []).map(f => f.path);
-        
-        // On récupère les données
         let { sizes, colors, ...productData } = req.body;
 
-        // IMPORTANTE CORRECTION : Conversion des chaînes JSON en tableaux réels
         if (sizes && typeof sizes === 'string') {
             try { sizes = JSON.parse(sizes); } catch(e) { sizes = []; }
         }
@@ -531,24 +482,18 @@ app.post('/api/products', authenticateToken, productUploads, async (req, res) =>
     }
 });
 
-// ✅ MODIFICATION : Même logique pour l'update
 app.put('/api/products/:id', authenticateToken, productUploads, async (req, res) => {
     try {
         let { sizes, colors, ...updateData } = req.body;
-
-        // Conversion JSON string -> Array
         if (sizes && typeof sizes === 'string') {
             try { updateData.sizes = JSON.parse(sizes); } catch(e) {}
         }
         if (colors && typeof colors === 'string') {
             try { updateData.colors = JSON.parse(colors); } catch(e) {}
         }
-
-        // Si nouvelles images, on remplace (ou on ajoute selon votre logique, ici on remplace)
         if (req.files && req.files.length > 0) {
             updateData.images = req.files.map(f => f.path);
         }
-        
         const updated = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true });
         res.json(updated);
     } catch (err) { res.status(400).json({ error: err.message }); }
@@ -559,12 +504,13 @@ app.delete('/api/products/:id', authenticateToken, async (req, res) => {
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- BOOKS ---
+// --- BOOKS (CORRIGÉ AVEC LOGS) ---
 app.get('/api/books', async (req, res) => {
     try { const books = await Book.find().sort({ createdAt: -1 }); res.json(books); } 
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ✅ ICI : Ajout du catch détaillé pour voir l'erreur dans Coolify
 app.post('/api/books', bookUploads, async (req, res) => {
     try {
         const pdf = req.files['pdfFile']?.[0];
@@ -576,7 +522,11 @@ app.post('/api/books', bookUploads, async (req, res) => {
         });
         await book.save();
         res.status(201).json(book);
-    } catch (err) { res.status(400).json({ error: err.message }); }
+    } catch (err) { 
+        console.error("❌ ERREUR UPLOAD LIVRE:", err.message);
+        console.error("DETAILS:", JSON.stringify(err, null, 2));
+        res.status(500).json({ error: err.message, details: JSON.stringify(err) }); 
+    }
 });
 
 app.delete('/api/books/:id', authenticateToken, async (req, res) => {
@@ -585,34 +535,20 @@ app.delete('/api/books/:id', authenticateToken, async (req, res) => {
 });
 
 // --- BLOG ---
-
 app.put('/api/blog/:id/like', async (req, res) => {
   try {
-    // On cherche l'article et on incrémente les likes
-    const post = await BlogPost.findByIdAndUpdate(
-      req.params.id, 
-      { $inc: { likes: 1 } }, // $inc est une commande Mongo pour ajouter +1
-      { new: true } // On renvoie la version mise à jour
-    );
+    const post = await BlogPost.findByIdAndUpdate(req.params.id, { $inc: { likes: 1 } }, { new: true });
     res.json(post);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-// 2. ROUTE POUR COMMENTER
+
 app.post('/api/blog/:id/comment', async (req, res) => {
   try {
     const { author, content } = req.body;
-    
-    // On cherche l'article
     const post = await BlogPost.findById(req.params.id);
     if (!post) return res.status(404).json({ error: "Article introuvable" });
     
-    // On ajoute le commentaire au début du tableau (unshift)
-    post.comments.unshift({
-      author,
-      content,
-      date: new Date()
-    });
-    
+    post.comments.unshift({ author, content, date: new Date() });
     await post.save();
     res.json(post);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -642,19 +578,17 @@ app.put('/api/blog/:id', authenticateToken, blogUploads, async (req, res) => {
         const post = await BlogPost.findById(req.params.id);
         if(!post) return res.status(404).json({error: "Article introuvable"});
 
-        // Mise à jour des champs texte
         post.title = req.body.title || post.title;
         post.summary = req.body.summary || post.summary;
         post.content = req.body.content || post.content;
         post.category = req.body.category || post.category;
         post.author = req.body.author || post.author;
 
-        // Mise à jour fichiers UNIQUEMENT si envoyés
         const cover = req.files['coverImageFile']?.[0];
         const pdf = req.files['pdfDocumentFile']?.[0];
 
-        if (cover) post.coverImage = cover.path; // Cloudinary
-        if (pdf) post.pdfDocument = pdf.path;   // Cloudinary
+        if (cover) post.coverImage = cover.path;
+        if (pdf) post.pdfDocument = pdf.path;
 
         await post.save();
         res.json(post);
@@ -692,7 +626,7 @@ app.delete('/api/podcasts/:id', authenticateToken, async (req, res) => {
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- MEDIA (Galerie) ---
+// --- MEDIA ---
 app.get('/api/media', async (req, res) => {
     try { const media = await Media.find().sort({ createdAt: -1 }); res.json(media); }
     catch (err) { res.status(500).json({ error: err.message }); }
@@ -786,34 +720,22 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
         await newNotif.save();
         
         if (admin.apps.length) {
-    const message = {
-        notification: { 
-            title, 
-            body 
-        },
-        // Configuration spécifique Android
-        android: {
-            notification: {
-                icon: 'ic_stat_notify', // Nom du fichier sans .png
-                color: '#D4AF37',       // VOTRE COULEUR DORÉE ICI (Hex code)
-                sound: 'default'
-            }
-        },
-        // Configuration spécifique iOS (Optionnel)
-        apns: {
-            payload: {
-                aps: {
-                    sound: 'default'
-                }
-            }
-        },
-        topic: 'all_users'
-    };
-
-    admin.messaging().send(message)
-        .then(r => console.log('✈️ Push envoyé avec icône:', r))
-        .catch(e => console.log('⚠️ Erreur Push:', e.message));
-}
+            const message = {
+                notification: { title, body },
+                android: {
+                    notification: {
+                        icon: 'ic_stat_notify',
+                        color: '#D4AF37',
+                        sound: 'default'
+                    }
+                },
+                apns: { payload: { aps: { sound: 'default' } } },
+                topic: 'all_users'
+            };
+            admin.messaging().send(message)
+                .then(r => console.log('✈️ Push envoyé avec icône:', r))
+                .catch(e => console.log('⚠️ Erreur Push:', e.message));
+        }
         res.status(201).json(newNotif);
     } catch (err) { res.status(400).json({ error: err.message }); }
 });
@@ -823,7 +745,7 @@ app.delete('/api/notifications/:id', authenticateToken, async (req, res) => {
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- CONTACT / MESSAGERIE ---
+// --- CONTACT ---
 app.post('/api/contact', async (req, res) => {
     try {
         const newMessage = new Contact(req.body);
@@ -842,7 +764,6 @@ app.delete('/api/contact/:id', authenticateToken, async (req, res) => {
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- UPLOAD GÉNÉRIQUE (Admin Home) ---
 app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Fichier requis" });
@@ -854,15 +775,12 @@ app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => 
 });
 
 // ==========================================
-// 5. DÉMARRAGE DU SERVEUR (CORRIGÉ & ROBUSTE)
+// 5. DÉMARRAGE DU SERVEUR
 // ==========================================
 const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
-// 1. On lance la connexion DB
 mongoose.connect(MONGODB_URI)
   .then(async () => {
     console.log('✅ Connecté à MongoDB ATLAS (En ligne)');
-    
-    // Création Admin Auto
     try {
         const adminEmail = "admin@daara.com";
         const adminExist = await User.findOne({ email: adminEmail });
@@ -877,6 +795,4 @@ mongoose.connect(MONGODB_URI)
       console.error('❌ Erreur critique MongoDB:', err);
   });
 
-// 2. IMPORTANT : On démarre le serveur IMMÉDIATEMENT, sans attendre la DB
-// Cela permet à Render de détecter que le service est "Live" et évite les 404
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Serveur en ligne sur le port ${PORT}`));
