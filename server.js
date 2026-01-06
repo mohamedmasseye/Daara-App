@@ -101,6 +101,7 @@ const allowedOrigins = [
   'http://localhost',
   'https://localhost',
   'http://91.99.200.188:5000',
+  'https://api.daaraserignemordiop.com',
   'http://localhost:3000',
   'http://localhost:5173'
 ];
