@@ -122,10 +122,9 @@ const corsOptions = {
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors(corsOptions));
 
-// ✅ MODIFICATION CRUCIALE ICI : Augmentation de la limite à 50MB
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
+// ✅ MODIFICATION CRUCIALE ICI : Augmentation de la limite à 100 MB
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 app.use('/uploads', express.static(uploadDir));
 
 // ==========================================
@@ -149,7 +148,7 @@ const storage = new CloudinaryStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 50 * 1024 * 1024 // ✅ 50 MB
+    fileSize: 100 * 1024 * 1024
   }
 });
 
