@@ -94,6 +94,7 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
 // --- CONFIGURATION CORS ---
 const allowedOrigins = [
+  'https://app.daaraserignemordiop.com',
   'http://pok408wwkw084ckk0ogscsgw.91.99.200.188.sslip.io',
   'https://pok408wwkw084ckk0ogscsgw.91.99.200.188.sslip.io',
   'capacitor://localhost',
@@ -101,8 +102,7 @@ const allowedOrigins = [
   'https://localhost',
   'http://91.99.200.188:5000',
   'http://localhost:3000',
-  'http://localhost:5173',
-  'https://daaraserignemordiop.vercel.app'
+  'http://localhost:5173'
 ];
 
 const corsOptions = {
