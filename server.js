@@ -413,16 +413,24 @@ app.delete('/api/categories/:id', authenticateToken, async(req,res)=>{ try{await
 // ==========================================
 // 5. SERVER START
 // ==========================================
-mongoose.connect(process.env.MONGODB_URI)
-  .then(async () => {
-    console.log('✅ MongoDB Connecté');
-    try {
-        if(!await User.findOne({email:"admin@daara.com"})) {
-            await new User({fullName:"Admin", email:"admin@daara.com", password: await bcrypt.hash("password123",10), role:"admin", phone:"770000000"}).save();
-            console.log("👑 Admin créé");
-        }
-    } catch(e) {}
-  })
-  .catch(e => console.log('❌ Erreur Mongo:', e));
+const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
+
+// Vérification de sécurité pour éviter le crash "undefined"
+if (!MONGODB_URI) {
+  console.error("❌ ERREUR FATALE : La variable d'environnement MONGO_URI est manquante !");
+  console.error("👉 Vérifiez vos variables dans Coolify.");
+} else {
+  mongoose.connect(MONGODB_URI) // ✅ CORRECTION ICI : On utilise la variable MONGODB_URI définie au-dessus
+    .then(async () => {
+      console.log('✅ MongoDB Connecté');
+      try {
+          if(!await User.findOne({email:"admin@daara.com"})) {
+              await new User({fullName:"Admin", email:"admin@daara.com", password: await bcrypt.hash("password123",10), role:"admin", phone:"770000000"}).save();
+              console.log("👑 Admin créé");
+          }
+      } catch(e) {}
+    })
+    .catch(e => console.log('❌ Erreur Mongo:', e));
+}
 
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Port ${PORT}`));
