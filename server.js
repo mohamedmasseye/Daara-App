@@ -149,7 +149,7 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
     if (admin.apps.length) {
       const message = {
         notification: { title, body },
-        data: { url: url || "/" },
+        data: { url: url || "/evenements"},
         android: { notification: { icon: 'ic_stat_notify', color: '#D4AF37', sound: 'default' } },
         apns: { payload: { aps: { sound: 'default', badge: 1 } } },
         topic: 'all_users'
