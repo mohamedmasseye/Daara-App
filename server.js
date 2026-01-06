@@ -194,6 +194,21 @@ const authenticateToken = (req, res, next) => {
 // 4. ROUTES API
 // ==========================================
 
+// Route pour abonner un token au topic "all_users"
+app.post('/api/notifications/subscribe', async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    // Utilisation de l'Admin SDK pour lier le token au topic
+    await admin.messaging().subscribeToTopic(token, 'all_users');
+    console.log(`Token abonné au topic all_users : ${token}`);
+    res.status(200).json({ message: 'Abonnement réussi au topic all_users' });
+  } catch (error) {
+    console.error('Erreur abonnement topic:', error);
+    res.status(500).json({ error: 'Échec de l abonnement' });
+  }
+});
+
 // --- AUTHENTIFICATION ---
 app.post('/api/auth/login', async (req, res) => {
   try {
