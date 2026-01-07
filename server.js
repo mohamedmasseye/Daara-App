@@ -12,10 +12,10 @@ const bcrypt = require('bcryptjs');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const admin = require('firebase-admin');
-const rateLimit = require('express-rate-limit'); // ✅ IMPORT SÉCURITÉ
+const rateLimit = require('express-rate-limit');
 
 // ==========================================
-// 0. CONFIGURATION FIREBASE (VERSION ROBUSTE)
+// 0. CONFIGURATION FIREBASE
 // ==========================================
 try {
   let serviceAccount;
@@ -50,7 +50,10 @@ try {
 // 1. INITIALISATION APP & MIDDLEWARES
 // ==========================================
 const app = express();
+
+// ✅ CRUCIAL : Indique à Express qu'il est derrière un proxy (Hébergeur)
 app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'daara_secret_key_super_securisee_123';
 
@@ -74,43 +77,22 @@ app.use(cors({
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-// --- 🛡️ CONFIGURATION RATE LIMITING MODIFIÉE ---
+// --- 🛡️ CONFIGURATION SÉCURITÉ (LOGIN UNIQUEMENT) ---
 
-// 1. Limiteur Global (Protection générale)
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: "Trop de requêtes. Veuillez patienter 15 minutes." },
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // ✅ Limite à 5 tentatives
+  message: { error: "Trop de tentatives de connexion. Réessayez dans 15 min." },
   standardHeaders: true,
   legacyHeaders: false,
-  // ✅ Optionnel mais recommandé pour éviter les crashs de validation
+  // ✅ Empêche l'erreur X-Forwarded-For de bloquer le serveur
   validate: { xForwardedForHeader: false }, 
 });
 
-// 2. Limiteur de LOGIN (Strict - contre le Brute Force)
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: "Trop de tentatives de connexion. Accès bloqué 15 min." },
-  validate: { xForwardedForHeader: false },
-});
-
-// 3. Limiteur d'INSCRIPTION et GOOGLE (Souple)
-// On autorise plus de tentatives pour éviter de bloquer les nouveaux utilisateurs
-const registerLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  message: { error: "Trop de tentatives. Réessayez dans 15 min." },
-  validate: { xForwardedForHeader: false },
-});
-
-// Application intelligente des limiteurs
-app.use('/api/', generalLimiter);
+// ✅ On applique la sécurité UNIQUEMENT sur la route de login classique
 app.use('/api/auth/login', loginLimiter);
-app.use('/api/auth/register', registerLimiter); // ✅ Inscription plus souple
-app.use('/api/auth/google', registerLimiter);   // ✅ Google plus souple
-app.use('/api/auth/google-mobile', registerLimiter); // ✅ Ajout pour le mobile
 
+// Note : L'inscription et Google n'ont plus de limiteur pour éviter les blocages.
 
 // ==========================================
 // 2. CONFIGURATION CLOUDINARY & MULTER
@@ -186,10 +168,7 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
     
     if (admin.apps.length) {
       const message = {
-        notification: {
-          title: title || "📅 Nouvel Événement",
-          body: body || "Cliquez pour découvrir les détails."
-        },
+        notification: { title: title || "📅 Nouvel Événement", body: body || "Cliquez pour découvrir les détails." },
         data: { url: url || "/evenements" },
         android: {
           priority: "high",
@@ -239,7 +218,6 @@ app.post('/api/auth/google', async (req, res) => {
   } catch (e) { res.status(401).json({ error: "Erreur Google" }); }
 });
 
-// Route spécifique pour mobile (Capacitor)
 app.post('/api/auth/google-mobile', async (req, res) => {
   try {
     const decoded = await admin.auth().verifyIdToken(req.body.idToken || req.body.token);
