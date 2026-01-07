@@ -148,14 +148,16 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
     
     if (admin.apps.length) {
       const message = {
-    notification: { title, body },
-    data: {
-        // On envoie le chemin relatif ET l'ID seul
-        url: url || "/evenements",
-        eventId: url ? url.split('id=')[1] : "" 
-    },
-    topic: 'all_users'
-};
+        notification: {
+        title: "📅 Nouvel Événement",
+        body: "Cliquez pour découvrir les détails."
+      },
+      data: {
+        // ✅ C'est ce champ que l'APK et le SW vont lire
+        url: "/evenements?id=ID_DE_L_EVENEMENT", 
+      },
+      topic: "all_users"
+      };
       await admin.messaging().send(message);
     }
     res.status(201).json(newNotif);
