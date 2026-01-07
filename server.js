@@ -321,13 +321,42 @@ app.delete('/api/products/:id', authenticateToken, async (req, res) => {
 
 // --- LIVRES ---
 app.get('/api/books', async (req, res) => {
-  res.json(await Book.find().sort({ createdAt: -1 }));
+  try {
+    res.json(await Book.find().sort({ createdAt: -1 }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/books', authenticateToken, bookUploads, async (req, res) => {
-  const book = new Book({ ...req.body, pdfUrl: req.files['pdfFile']?.[0].path, coverUrl: req.files['coverImage']?.[0].path });
-  await book.save();
-  res.status(201).json(book);
+  try {
+    const book = new Book({ 
+      ...req.body, 
+      pdfUrl: req.files['pdfFile']?.[0].path, 
+      coverUrl: req.files['coverImage']?.[0].path 
+    });
+    await book.save();
+    res.status(201).json(book);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// ✅ NOUVELLE ROUTE : MODIFICATION
+app.put('/api/books/:id', authenticateToken, bookUploads, async (req, res) => {
+  try {
+    const update = { ...req.body };
+    if (req.files['pdfFile']) update.pdfUrl = req.files['pdfFile'][0].path;
+    if (req.files['coverImage']) update.coverUrl = req.files['coverImage'][0].path;
+    
+    const updatedBook = await Book.findByIdAndUpdate(req.params.id, update, { new: true });
+    res.json(updatedBook);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// ✅ NOUVELLE ROUTE : SUPPRESSION (Règle ton erreur 404)
+app.delete('/api/books/:id', authenticateToken, async (req, res) => {
+  try {
+    const book = await Book.findByIdAndDelete(req.params.id);
+    if (!book) return res.status(404).json({ error: "Livre non trouvé" });
+    res.json({ message: "Supprimé avec succès" });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- BLOG ---
