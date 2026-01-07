@@ -232,8 +232,9 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
 });
 
 // --- GESTION UTILISATEURS ---
-app.get('/api/users', authenticateToken, async (req, res) => {
-  res.json(await User.find().select('-password').sort({ createdAt: -1 }));
+app.get('/api/users', async (req, res) => {
+  const users = await User.find().select('-password');
+  res.json(users);
 });
 
 app.delete('/api/users/:id', authenticateToken, async (req, res) => {
