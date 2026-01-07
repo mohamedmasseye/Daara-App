@@ -382,24 +382,58 @@ app.delete('/api/contact/:id', authenticateToken, async (req, res) => {
   res.json({ message: "Message supprimé" });
 });
 
-// --- NOTIFICATIONS & HOME ---
+// 1. Récupérer l'historique (Indispensable pour l'affichage Admin)
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+  try {
+    const list = await Notification.find().sort({ date: -1 });
+    res.json(list);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 2. Envoyer une notification (Sauvegarde + Envoi Mobile via Firebase)
 app.post('/api/notifications', authenticateToken, async (req, res) => {
-  const newNotif = new Notification(req.body);
-  await newNotif.save();
-  res.status(201).json(newNotif);
+  try {
+    const { title, body, type } = req.body;
+    
+    // Sauvegarde en base de données
+    const newNotif = new Notification({ title, body, type, date: new Date() });
+    await newNotif.save();
+
+    // Envoi réel aux smartphones via Firebase Cloud Messaging
+    const payload = {
+      notification: { title, body },
+      topic: 'all_users'
+    };
+
+    try {
+      await admin.messaging().send(payload);
+      console.log("Notification push envoyée au topic all_users");
+    } catch (fcmError) {
+      console.log("⚠️ Erreur d'envoi FCM (Firebase non configuré ?)", fcmError.message);
+    }
+
+    res.status(201).json(newNotif);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// 3. S'abonner aux notifications (Utilisé par NotificationBanner.jsx)
+app.post('/api/notifications/subscribe', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: "Token manquant" });
+    
+    // Abonnement du token au topic global
+    await admin.messaging().subscribeToTopic(token, 'all_users');
+    res.json({ message: "Abonnement réussi" });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 4. Supprimer une notification de l'historique
 app.delete('/api/notifications/:id', authenticateToken, async (req, res) => {
-    await Notification.findByIdAndDelete(req.params.id);
-    res.json({ message: "Supprimée" });
-});
-
-app.get('/api/home-content', async (req, res) => { res.json(await HomeContent.findOne() || {}); });
-app.post('/api/home-content', authenticateToken, async (req, res) => {
-  await HomeContent.deleteMany({});
-  const content = new HomeContent(req.body);
-  await content.save();
-  res.status(201).json(content);
+    try {
+      await Notification.findByIdAndDelete(req.params.id);
+      res.json({ message: "Supprimée" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- UPLOAD GÉNÉRIQUE ---
