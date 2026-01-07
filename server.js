@@ -20,7 +20,6 @@ const rateLimit = require('express-rate-limit');
 try {
   let serviceAccount;
   let rawData = process.env.FIREBASE_SERVICE_ACCOUNT;
-
   if (rawData) {
     rawData = rawData.trim();
     if (rawData.startsWith('"') && rawData.endsWith('"')) rawData = rawData.slice(1, -1);
@@ -34,26 +33,18 @@ try {
     rawData = rawData.replace(/\\"/g, '"').replace(/\\\\n/g, '\\n');
     serviceAccount = JSON.parse(rawData);
     if (serviceAccount.private_key) serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-
     admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-    console.log("🔥 Firebase Admin connecté avec succès !");
   } else {
     serviceAccount = require('./serviceAccountKey.json');
     admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-    console.log("💻 Firebase Admin connecté en local.");
   }
-} catch (error) {
-  console.log("⚠️ Erreur Firebase :", error.message);
-}
+} catch (error) { console.log("⚠️ Erreur Firebase :", error.message); }
 
 // ==========================================
 // 1. INITIALISATION APP & MIDDLEWARES
 // ==========================================
 const app = express();
-
-// ✅ Autorise le proxy de l'hébergeur pour récupérer l'IP réelle
 app.set('trust proxy', 1);
-
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'daara_secret_key_super_securisee_123';
 
@@ -77,12 +68,10 @@ app.use(cors({
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-// --- 🛡️ SÉCURITÉ : LIMITER UNIQUEMENT LE LOGIN ---
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
-  max: 5, 
-  message: { error: "Trop de tentatives de connexion. Réessayez dans 15 min." },
-  validate: { xForwardedForHeader: false }, 
+  max: 10, 
+  message: { error: "Trop de tentatives. Réessayez dans 15 min." }
 });
 app.use('/api/auth/login', loginLimiter);
 
@@ -101,14 +90,11 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({ storage: storage, limits: { fileSize: 100 * 1024 * 1024 } });
-
 const productUploads = upload.array('productImages', 5);
 const eventUploads = upload.fields([{ name: 'eventImage', maxCount: 1 }, { name: 'eventDocument', maxCount: 1 }]);
 const podcastUploads = upload.fields([{ name: 'audioFile', maxCount: 1 }, { name: 'coverImageFile', maxCount: 1 }]);
 const bookUploads = upload.fields([{ name: 'pdfFile', maxCount: 1 }, { name: 'coverImage', maxCount: 1 }]);
 const blogUploads = upload.fields([{ name: 'coverImageFile', maxCount: 1 }, { name: 'pdfDocumentFile', maxCount: 1 }]);
-const mediaUploads = upload.single('mediaFile');
-const avatarUpload = upload.single('avatar');
 
 // ==========================================
 // 3. IMPORTS DES MODÈLES & AUTH MIDDLEWARE
@@ -130,73 +116,25 @@ const HomeContent = require('./models/HomeContent');
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    console.log("❌ Tentative d'accès sans token");
-    return res.status(401).json({ error: "Accès refusé (token manquant)" });
-  }
+  if (!token) return res.status(401).json({ error: "Accès refusé" });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      // ✅ Ce log est crucial pour comprendre le 403
-      console.error("❌ Échec JWT sur /api/users :", err.message); 
-      
-      if (err.message === "jwt expired") {
-        return res.status(403).json({ error: "Session expirée, reconnectez-vous" });
-      }
-      return res.status(403).json({ error: "Token invalide" });
-    }
+    if (err) return res.status(403).json({ error: "Session invalide" });
     req.user = user;
     next();
   });
 };
 
 // ==========================================
-// 4. TOUTES LES ROUTES API
+// 4. TOUTES LES ROUTES API (CRUD COMPLET)
 // ==========================================
-
-// --- NOTIFICATIONS ---
-app.post('/api/notifications/subscribe', async (req, res) => {
-  try {
-    await admin.messaging().subscribeToTopic(req.body.token, 'all_users');
-    res.json({ message: 'Abonné' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/notifications', async (req, res) => {
-  try { res.json(await Notification.find().sort({ date: -1 })); } catch (e) { res.status(500).send(e); }
-});
-
-app.post('/api/notifications', authenticateToken, async (req, res) => {
-  try {
-    const { title, body, type, url } = req.body;
-    const newNotif = new Notification({ title, body, type: type || 'info' });
-    await newNotif.save();
-    
-    if (admin.apps.length) {
-      const message = {
-        notification: { title: title || "📅 Nouvel Événement", body: body || "Cliquez pour découvrir les détails." },
-        data: { url: url || "/evenements" },
-        android: { priority: "high", notification: { sound: "default", clickAction: "FCM_PLUGIN_ACTIVITY", icon: "ic_stat_notify" } },
-        topic: "all_users"
-      };
-      await admin.messaging().send(message);
-    }
-    res.status(201).json(newNotif);
-  } catch (err) { res.status(400).json({ error: err.message }); }
-});
-
-app.delete('/api/notifications/:id', authenticateToken, async (req, res) => {
-    try { await Notification.findByIdAndDelete(req.params.id); res.json({ message: "Supprimée" }); }
-    catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 // --- AUTHENTIFICATION ---
 app.post('/api/auth/login', async (req, res) => {
   const { identifier, password } = req.body;
   const user = await User.findOne({ $or: [{ email: identifier }, { phone: identifier }] });
   if (!user || !(await bcrypt.compare(password, user.password))) return res.status(400).json({ error: "Identifiants incorrects" });
-  const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+  const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ token, user });
 });
 
@@ -207,82 +145,75 @@ app.post('/api/auth/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({ fullName, email: isEmail ? identifier : undefined, phone: !isEmail ? identifier : undefined, password: hashedPassword });
     await user.save();
-    res.status(201).json({ message: "Créé" });
-  } catch (e) { res.status(400).json({ error: "Déjà inscrit" }); }
-});
-
-app.post('/api/auth/google', async (req, res) => {
-  try {
-    const decoded = await admin.auth().verifyIdToken(req.body.token);
-    let user = await User.findOne({ email: decoded.email });
-    if (!user) {
-      user = new User({ fullName: decoded.name, email: decoded.email, googleId: decoded.uid, avatar: decoded.picture, role: 'user' });
-      await user.save();
-    }
-    res.json({ token: jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '30d' }), user });
-  } catch (e) { res.status(401).json({ error: "Erreur Google" }); }
-});
-
-app.post('/api/auth/google-mobile', async (req, res) => {
-  try {
-    const decoded = await admin.auth().verifyIdToken(req.body.idToken || req.body.token);
-    let user = await User.findOne({ email: decoded.email });
-    if (!user) {
-      user = new User({ fullName: decoded.name, email: decoded.email, googleId: decoded.uid, avatar: decoded.picture, role: 'user' });
-      await user.save();
-    }
-    res.json({ token: jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '30d' }), user });
-  } catch (e) { res.status(401).json({ error: "Erreur Google Mobile" }); }
+    res.status(201).json({ message: "Compte créé" });
+  } catch (e) { res.status(400).json({ error: "Email ou téléphone déjà utilisé" }); }
 });
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   res.json(await User.findById(req.user.id).select('-password'));
 });
 
-app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
+app.put('/api/auth/me', authenticateToken, upload.single('avatar'), async (req, res) => {
   const update = { ...req.body };
   if (req.file) update.avatar = req.file.path;
-  res.json(await User.findByIdAndUpdate(req.user.id, update, { new: true }));
+  const user = await User.findByIdAndUpdate(req.user.id, update, { new: true });
+  res.json(user);
 });
 
-// --- GESTION UTILISATEURS ---
+// --- GESTION UTILISATEURS (ADMIN) ---
 app.get('/api/users', authenticateToken, async (req, res) => {
-  try {
-    const users = await User.find().select('-password').sort({ createdAt: -1 });
-    res.json(users);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  res.json(await User.find().select('-password').sort({ createdAt: -1 }));
 });
 
 app.delete('/api/users/:id', authenticateToken, async (req, res) => {
   await User.findByIdAndDelete(req.params.id);
-  res.json({ message: "Supprimé" });
+  res.json({ message: "Utilisateur supprimé" });
 });
 
-// --- CATEGORIES ---
-app.get('/api/categories', async (req, res) => {
-  const { type } = req.query;
-  res.json(await Category.find(type ? { type } : {}).sort({ name: 1 }));
+// --- LIVRES (CRUD) ---
+app.get('/api/books', async (req, res) => { res.json(await Book.find().sort({ createdAt: -1 })); });
+
+app.post('/api/books', authenticateToken, bookUploads, async (req, res) => {
+  const book = new Book({ ...req.body, pdfUrl: req.files['pdfFile']?.[0]?.path, coverUrl: req.files['coverImage']?.[0]?.path });
+  await book.save();
+  res.status(201).json(book);
 });
 
-app.post('/api/categories', authenticateToken, async (req, res) => {
-  try {
-    const cat = new Category(req.body);
-    await cat.save();
-    res.status(201).json(cat);
-  } catch (e) { res.status(400).json({ error: "Existe déjà" }); }
+app.put('/api/books/:id', authenticateToken, bookUploads, async (req, res) => {
+  const update = { ...req.body };
+  if (req.files['pdfFile']) update.pdfUrl = req.files['pdfFile'][0].path;
+  if (req.files['coverImage']) update.coverUrl = req.files['coverImage'][0].path;
+  res.json(await Book.findByIdAndUpdate(req.params.id, update, { new: true }));
 });
 
-app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
-  await Category.findByIdAndDelete(req.params.id);
-  res.json({ message: "Supprimé" });
+app.delete('/api/books/:id', authenticateToken, async (req, res) => {
+  await Book.findByIdAndDelete(req.params.id);
+  res.json({ message: "Livre supprimé" });
 });
 
-// --- EVENEMENTS ---
-app.get('/api/events', async (req, res) => {
-  res.json(await Event.find().sort({ date: 1 }));
+// --- BOUTIQUE / PRODUITS (CRUD) ---
+app.get('/api/products', async (req, res) => { res.json(await Product.find().populate('category').sort({ createdAt: -1 })); });
+
+app.post('/api/products', authenticateToken, productUploads, async (req, res) => {
+  const images = (req.files || []).map(f => f.path);
+  const prod = new Product({ ...req.body, images });
+  await prod.save();
+  res.status(201).json(prod);
 });
+
+app.put('/api/products/:id', authenticateToken, productUploads, async (req, res) => {
+  const update = { ...req.body };
+  if (req.files && req.files.length > 0) update.images = req.files.map(f => f.path);
+  res.json(await Product.findByIdAndUpdate(req.params.id, update, { new: true }));
+});
+
+app.delete('/api/products/:id', authenticateToken, async (req, res) => {
+  await Product.findByIdAndDelete(req.params.id);
+  res.json({ message: "Produit supprimé" });
+});
+
+// --- EVENEMENTS (CRUD) ---
+app.get('/api/events', async (req, res) => { res.json(await Event.find().sort({ date: 1 })); });
 
 app.post('/api/events', authenticateToken, eventUploads, async (req, res) => {
   const evt = new Event({ ...req.body, image: req.files['eventImage']?.[0].path, documentUrl: req.files['eventDocument']?.[0].path });
@@ -299,70 +230,11 @@ app.put('/api/events/:id', authenticateToken, eventUploads, async (req, res) => 
 
 app.delete('/api/events/:id', authenticateToken, async (req, res) => {
   await Event.findByIdAndDelete(req.params.id);
-  res.json({ message: "Supprimé" });
+  res.json({ message: "Événement supprimé" });
 });
 
-// --- BOUTIQUE (PRODUITS) ---
-app.get('/api/products', async (req, res) => {
-  res.json(await Product.find().populate('category').sort({ createdAt: -1 }));
-});
-
-app.post('/api/products', authenticateToken, productUploads, async (req, res) => {
-  const images = (req.files || []).map(f => f.path);
-  const prod = new Product({ ...req.body, images });
-  await prod.save();
-  res.status(201).json(prod);
-});
-
-app.delete('/api/products/:id', authenticateToken, async (req, res) => {
-  await Product.findByIdAndDelete(req.params.id);
-  res.json({ message: "Supprimé" });
-});
-
-// --- LIVRES ---
-app.get('/api/books', async (req, res) => {
-  try {
-    res.json(await Book.find().sort({ createdAt: -1 }));
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/books', authenticateToken, bookUploads, async (req, res) => {
-  try {
-    const book = new Book({ 
-      ...req.body, 
-      pdfUrl: req.files['pdfFile']?.[0].path, 
-      coverUrl: req.files['coverImage']?.[0].path 
-    });
-    await book.save();
-    res.status(201).json(book);
-  } catch (e) { res.status(400).json({ error: e.message }); }
-});
-
-// ✅ NOUVELLE ROUTE : MODIFICATION
-app.put('/api/books/:id', authenticateToken, bookUploads, async (req, res) => {
-  try {
-    const update = { ...req.body };
-    if (req.files['pdfFile']) update.pdfUrl = req.files['pdfFile'][0].path;
-    if (req.files['coverImage']) update.coverUrl = req.files['coverImage'][0].path;
-    
-    const updatedBook = await Book.findByIdAndUpdate(req.params.id, update, { new: true });
-    res.json(updatedBook);
-  } catch (e) { res.status(400).json({ error: e.message }); }
-});
-
-// ✅ NOUVELLE ROUTE : SUPPRESSION (Règle ton erreur 404)
-app.delete('/api/books/:id', authenticateToken, async (req, res) => {
-  try {
-    const book = await Book.findByIdAndDelete(req.params.id);
-    if (!book) return res.status(404).json({ error: "Livre non trouvé" });
-    res.json({ message: "Supprimé avec succès" });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- BLOG ---
-app.get('/api/blog', async (req, res) => {
-  res.json(await BlogPost.find().sort({ createdAt: -1 }));
-});
+// --- BLOG (CRUD) ---
+app.get('/api/blog', async (req, res) => { res.json(await BlogPost.find().sort({ createdAt: -1 })); });
 
 app.post('/api/blog', authenticateToken, blogUploads, async (req, res) => {
   const post = new BlogPost({ ...req.body, coverImage: req.files['coverImageFile']?.[0].path, pdfDocument: req.files['pdfDocumentFile']?.[0].path });
@@ -370,14 +242,20 @@ app.post('/api/blog', authenticateToken, blogUploads, async (req, res) => {
   res.status(201).json(post);
 });
 
-app.put('/api/blog/:id/like', async (req, res) => {
-  res.json(await BlogPost.findByIdAndUpdate(req.params.id, { $inc: { likes: 1 } }, { new: true }));
+app.put('/api/blog/:id', authenticateToken, blogUploads, async (req, res) => {
+  const update = { ...req.body };
+  if (req.files['coverImageFile']) update.coverImage = req.files['coverImageFile'][0].path;
+  if (req.files['pdfDocumentFile']) update.pdfDocument = req.files['pdfDocumentFile'][0].path;
+  res.json(await BlogPost.findByIdAndUpdate(req.params.id, update, { new: true }));
 });
 
-// --- PODCASTS ---
-app.get('/api/podcasts', async (req, res) => {
-  res.json(await Podcast.find().sort({ createdAt: -1 }));
+app.delete('/api/blog/:id', authenticateToken, async (req, res) => {
+  await BlogPost.findByIdAndDelete(req.params.id);
+  res.json({ message: "Article supprimé" });
 });
+
+// --- PODCASTS (CRUD) ---
+app.get('/api/podcasts', async (req, res) => { res.json(await Podcast.find().sort({ createdAt: -1 })); });
 
 app.post('/api/podcasts', authenticateToken, podcastUploads, async (req, res) => {
   const pod = new Podcast({ ...req.body, audioUrl: req.files['audioFile'][0].path, coverImage: req.files['coverImageFile']?.[0].path });
@@ -385,18 +263,19 @@ app.post('/api/podcasts', authenticateToken, podcastUploads, async (req, res) =>
   res.status(201).json(pod);
 });
 
-// --- MEDIAS ---
-app.get('/api/media', async (req, res) => {
-  res.json(await Media.find().sort({ createdAt: -1 }));
+app.put('/api/podcasts/:id', authenticateToken, podcastUploads, async (req, res) => {
+  const update = { ...req.body };
+  if (req.files['audioFile']) update.audioUrl = req.files['audioFile'][0].path;
+  if (req.files['coverImageFile']) update.coverImage = req.files['coverImageFile'][0].path;
+  res.json(await Podcast.findByIdAndUpdate(req.params.id, update, { new: true }));
 });
 
-app.post('/api/media', authenticateToken, mediaUploads, async (req, res) => {
-  const med = new Media({ ...req.body, url: req.file.path });
-  await med.save();
-  res.status(201).json(med);
+app.delete('/api/podcasts/:id', authenticateToken, async (req, res) => {
+  await Podcast.findByIdAndDelete(req.params.id);
+  res.json({ message: "Podcast supprimé" });
 });
 
-// --- COMMANDES ---
+// --- COMMANDES & BILLETS ---
 app.post('/api/orders', authenticateToken, async (req, res) => {
   const order = new Order({ ...req.body, status: 'Pending' });
   const saved = await order.save();
@@ -409,40 +288,45 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
   res.status(201).json(saved);
 });
 
-app.get('/api/orders', authenticateToken, async (req, res) => {
-  res.json(await Order.find().populate('user', 'fullName email').sort({ createdAt: -1 }));
+app.get('/api/orders', authenticateToken, async (req, res) => { res.json(await Order.find().populate('user', 'fullName email').sort({ createdAt: -1 })); });
+app.get('/api/my-orders', authenticateToken, async (req, res) => { res.json(await Order.find({ user: req.user.id }).sort({ createdAt: -1 })); });
+app.get('/api/my-tickets', authenticateToken, async (req, res) => { res.json(await Ticket.find({ user: req.user.id }).populate('event').sort({ createdAt: -1 })); });
+
+app.put('/api/orders/:id', authenticateToken, async (req, res) => {
+  const order = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
+  res.json(order);
 });
 
-app.get('/api/my-orders', authenticateToken, async (req, res) => {
-  res.json(await Order.find({ user: req.user.id }).sort({ createdAt: -1 }));
+app.delete('/api/orders/:id', authenticateToken, async (req, res) => {
+  await Order.findByIdAndDelete(req.params.id);
+  res.json({ message: "Commande supprimée" });
 });
 
-app.get('/api/my-tickets', authenticateToken, async (req, res) => {
-  res.json(await Ticket.find({ user: req.user.id }).populate('event').sort({ createdAt: -1 }));
-});
-
-// --- HOME CONTENT ---
-app.get('/api/home-content', async (req, res) => {
-  const content = await HomeContent.findOne();
-  res.json(content || {});
-});
-
-app.post('/api/home-content', authenticateToken, async (req, res) => {
-  await HomeContent.deleteMany({});
-  const content = new HomeContent(req.body);
-  await content.save();
-  res.status(201).json(content);
-});
-
-// --- CONTACT & UPLOAD ---
+// --- MESSAGES DE CONTACT ---
+app.get('/api/contact', authenticateToken, async (req, res) => { res.json(await Contact.find().sort({ createdAt: -1 })); });
 app.post('/api/contact', async (req, res) => {
   const msg = new Contact(req.body);
   await msg.save();
   res.status(201).json({ message: "Envoyé" });
 });
+app.delete('/api/contact/:id', authenticateToken, async (req, res) => {
+  await Contact.findByIdAndDelete(req.params.id);
+  res.json({ message: "Message supprimé" });
+});
 
-app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
-  res.json({ url: req.file.path });
+// --- NOTIFICATIONS & HOME ---
+app.post('/api/notifications', authenticateToken, async (req, res) => {
+  const newNotif = new Notification(req.body);
+  await newNotif.save();
+  res.status(201).json(newNotif);
+});
+
+app.get('/api/home-content', async (req, res) => { res.json(await HomeContent.findOne() || {}); });
+app.post('/api/home-content', authenticateToken, async (req, res) => {
+  await HomeContent.deleteMany({});
+  const content = new HomeContent(req.body);
+  await content.save();
+  res.status(201).json(content);
 });
 
 // ==========================================
