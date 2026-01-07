@@ -149,14 +149,26 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
     if (admin.apps.length) {
       const message = {
         notification: {
-        title: "📅 Nouvel Événement",
-        body: "Cliquez pour découvrir les détails."
-      },
-      data: {
-        // ✅ C'est ce champ que l'APK et le SW vont lire
-        url: "/evenements?id=ID_DE_L_EVENEMENT", 
-      },
-      topic: "all_users"
+          title: title || "📅 Nouvel Événement",
+          body: body || "Cliquez pour découvrir les détails."
+        },
+        data: {
+          // ✅ Utilise l'URL dynamique reçue de l'Admin
+          url: url || "/evenements", 
+        },
+        android: {
+          priority: "high", // ✅ Obligatoire pour recevoir quand l'app est fermée
+          notification: {
+            sound: "default",
+            clickAction: "FCM_PLUGIN_ACTIVITY" // ✅ Aide le clic à ouvrir l'app
+          }
+        },
+        apns: {
+          payload: {
+            aps: { sound: "default", badge: 1 }
+          }
+        },
+        topic: "all_users"
       };
       await admin.messaging().send(message);
     }
