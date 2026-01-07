@@ -253,6 +253,33 @@ app.delete('/api/blog/:id', authenticateToken, async (req, res) => {
   await BlogPost.findByIdAndDelete(req.params.id);
   res.json({ message: "Article supprimé" });
 });
+// --- MÉDIATHÈQUE / GALERIE ---
+app.get('/api/media', async (req, res) => {
+  try {
+    res.json(await Media.find().sort({ createdAt: -1 }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/media', authenticateToken, mediaUploads, async (req, res) => {
+  try {
+    const med = new Media({ 
+      title: req.body.title,
+      category: req.body.category,
+      type: req.body.type,
+      url: req.file.path // Cloudinary URL
+    });
+    await med.save();
+    res.status(201).json(med);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// Route pour la suppression individuelle (utilisée par la boucle de suppression de masse)
+app.delete('/api/media/:id', authenticateToken, async (req, res) => {
+  try {
+    await Media.findByIdAndDelete(req.params.id);
+    res.json({ message: "Élément supprimé" });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // --- PODCASTS (CRUD) ---
 app.get('/api/podcasts', async (req, res) => { res.json(await Podcast.find().sort({ createdAt: -1 })); });
