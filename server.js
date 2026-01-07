@@ -128,10 +128,24 @@ const Contact = require('./models/Contact');
 const HomeContent = require('./models/HomeContent');
 
 const authenticateToken = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: "Accès refusé" });
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    console.log("❌ Tentative d'accès sans token");
+    return res.status(401).json({ error: "Accès refusé (token manquant)" });
+  }
+
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: "Token invalide" });
+    if (err) {
+      // ✅ Ce log est crucial pour comprendre le 403
+      console.error("❌ Échec JWT sur /api/users :", err.message); 
+      
+      if (err.message === "jwt expired") {
+        return res.status(403).json({ error: "Session expirée, reconnectez-vous" });
+      }
+      return res.status(403).json({ error: "Token invalide" });
+    }
     req.user = user;
     next();
   });
@@ -232,9 +246,13 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
 });
 
 // --- GESTION UTILISATEURS ---
-app.get('/api/users', async (req, res) => {
-  const users = await User.find().select('-password');
-  res.json(users);
+app.get('/api/users', authenticateToken, async (req, res) => {
+  try {
+    const users = await User.find().select('-password').sort({ createdAt: -1 });
+    res.json(users);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.delete('/api/users/:id', authenticateToken, async (req, res) => {
