@@ -436,6 +436,23 @@ app.delete('/api/notifications/:id', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// 5. Contenu de la page d'accueil
+app.get('/api/home-content', async (req, res) => { 
+    try {
+      const content = await HomeContent.findOne();
+      res.json(content || {}); 
+    } catch (e) { res.json({}); }
+});
+
+app.post('/api/home-content', authenticateToken, async (req, res) => {
+  try {
+    await HomeContent.deleteMany({});
+    const content = new HomeContent(req.body);
+    await content.save();
+    res.status(201).json(content);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 // --- UPLOAD GÉNÉRIQUE ---
 app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
   res.json({ url: req.file.path });
