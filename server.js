@@ -148,24 +148,22 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
     
     if (admin.apps.length) {
       const message = {
+        // ✅ C'est cet objet qui permet la réception APP FERMÉE
         notification: {
           title: title || "📅 Nouvel Événement",
           body: body || "Cliquez pour découvrir les détails."
         },
+        // ✅ C'est cet objet qui permet la redirection au CLIC
         data: {
-          // ✅ Utilise l'URL dynamique reçue de l'Admin
           url: url || "/evenements", 
         },
         android: {
-          priority: "high", // ✅ Obligatoire pour recevoir quand l'app est fermée
+          priority: "high",
           notification: {
             sound: "default",
-            clickAction: "FCM_PLUGIN_ACTIVITY" // ✅ Aide le clic à ouvrir l'app
-          }
-        },
-        apns: {
-          payload: {
-            aps: { sound: "default", badge: 1 }
+            clickAction: "FCM_PLUGIN_ACTIVITY", // Important pour Capacitor
+            icon: "stock_ticker_update", // Remplacez par votre icône si besoin
+            color: "#001B3D"
           }
         },
         topic: "all_users"
