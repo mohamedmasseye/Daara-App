@@ -73,29 +73,38 @@ app.use(cors({
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-// --- 🛡️ CONFIGURATION RATE LIMITING (SÉCURITÉ ROBOTS) ---
+// --- 🛡️ CONFIGURATION RATE LIMITING MODIFIÉE ---
 
 // 1. Limiteur Global (Protection générale)
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requêtes max par IP
+  windowMs: 15 * 60 * 1000, 
+  max: 100, 
   message: { error: "Trop de requêtes. Veuillez patienter 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// 2. Limiteur d'Authentification (Brute Force)
-const authLimiter = rateLimit({
-  windowMs: 30 * 60 * 1000, // 30 minutes
-  max: 5, // 5 tentatives max
-  message: { error: "Trop de tentatives. Accès bloqué temporairement (30 min) par sécurité." }
+// 2. Limiteur de LOGIN (Strict - contre le Brute Force)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 10, // On passe à 10 tentatives pour être un peu plus souple
+  message: { error: "Trop de tentatives de connexion. Accès bloqué 15 min." }
 });
 
-// Application des limiteurs
+// 3. Limiteur d'INSCRIPTION et GOOGLE (Souple)
+// On autorise plus de tentatives pour éviter de bloquer les nouveaux utilisateurs
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 30, // 30 tentatives autorisées (très souple)
+  message: { error: "Trop de tentatives d'inscription ou d'auth Google. Réessayez dans 15 min." }
+});
+
+// Application intelligente des limiteurs
 app.use('/api/', generalLimiter);
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
-app.use('/api/auth/google', authLimiter);
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/register', registerLimiter); // ✅ Inscription plus souple
+app.use('/api/auth/google', registerLimiter);   // ✅ Google plus souple
+app.use('/api/auth/google-mobile', registerLimiter); // ✅ Ajout pour le mobile
 
 
 // ==========================================
@@ -114,7 +123,6 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage, limits: { fileSize: 100 * 1024 * 1024 } });
 
-// Définition des types d'uploads
 const productUploads = upload.array('productImages', 5);
 const eventUploads = upload.fields([{ name: 'eventImage', maxCount: 1 }, { name: 'eventDocument', maxCount: 1 }]);
 const podcastUploads = upload.fields([{ name: 'audioFile', maxCount: 1 }, { name: 'coverImageFile', maxCount: 1 }]);
@@ -154,7 +162,6 @@ const authenticateToken = (req, res, next) => {
 // 4. ROUTES API
 // ==========================================
 
-// --- NOTIFICATIONS & TOPICS ---
 app.post('/api/notifications/subscribe', async (req, res) => {
   try {
     await admin.messaging().subscribeToTopic(req.body.token, 'all_users');
@@ -178,16 +185,10 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
           title: title || "📅 Nouvel Événement",
           body: body || "Cliquez pour découvrir les détails."
         },
-        data: {
-          url: url || "/evenements", 
-        },
+        data: { url: url || "/evenements" },
         android: {
           priority: "high",
-          notification: {
-            sound: "default",
-            clickAction: "FCM_PLUGIN_ACTIVITY", 
-            icon: "ic_stat_notify"
-          }
+          notification: { sound: "default", clickAction: "FCM_PLUGIN_ACTIVITY", icon: "ic_stat_notify" }
         },
         topic: "all_users"
       };
@@ -202,7 +203,6 @@ app.delete('/api/notifications/:id', authenticateToken, async (req, res) => {
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- AUTHENTIFICATION & PROFIL ---
 app.post('/api/auth/login', async (req, res) => {
   const { identifier, password } = req.body;
   const user = await User.findOne({ $or: [{ email: identifier }, { phone: identifier }] });
@@ -234,6 +234,19 @@ app.post('/api/auth/google', async (req, res) => {
   } catch (e) { res.status(401).json({ error: "Erreur Google" }); }
 });
 
+// Route spécifique pour mobile (Capacitor)
+app.post('/api/auth/google-mobile', async (req, res) => {
+  try {
+    const decoded = await admin.auth().verifyIdToken(req.body.idToken || req.body.token);
+    let user = await User.findOne({ email: decoded.email });
+    if (!user) {
+      user = new User({ fullName: decoded.name, email: decoded.email, googleId: decoded.uid, avatar: decoded.picture, role: 'user' });
+      await user.save();
+    }
+    res.json({ token: jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '30d' }), user });
+  } catch (e) { res.status(401).json({ error: "Erreur Google Mobile" }); }
+});
+
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   res.json(await User.findById(req.user.id).select('-password'));
 });
@@ -244,7 +257,6 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
   res.json(await User.findByIdAndUpdate(req.user.id, update, { new: true }));
 });
 
-// --- GESTION UTILISATEURS ---
 app.get('/api/users', authenticateToken, async (req, res) => {
   res.json(await User.find().select('-password').sort({ createdAt: -1 }));
 });
@@ -254,7 +266,6 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
   res.json({ message: "Supprimé" });
 });
 
-// --- CATEGORIES ---
 app.get('/api/categories', async (req, res) => {
   const { type } = req.query;
   res.json(await Category.find(type ? { type } : {}).sort({ name: 1 }));
@@ -273,7 +284,6 @@ app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
   res.json({ message: "Supprimé" });
 });
 
-// --- EVENEMENTS ---
 app.get('/api/events', async (req, res) => {
   res.json(await Event.find().sort({ date: 1 }));
 });
@@ -296,7 +306,6 @@ app.delete('/api/events/:id', authenticateToken, async (req, res) => {
   res.json({ message: "Supprimé" });
 });
 
-// --- BOUTIQUE (PRODUITS) ---
 app.get('/api/products', async (req, res) => {
   res.json(await Product.find().populate('category').sort({ createdAt: -1 }));
 });
@@ -313,7 +322,6 @@ app.delete('/api/products/:id', authenticateToken, async (req, res) => {
   res.json({ message: "Supprimé" });
 });
 
-// --- LIVRES (BOOKS) ---
 app.get('/api/books', async (req, res) => {
   res.json(await Book.find().sort({ createdAt: -1 }));
 });
@@ -324,7 +332,6 @@ app.post('/api/books', authenticateToken, bookUploads, async (req, res) => {
   res.status(201).json(book);
 });
 
-// --- BLOG ---
 app.get('/api/blog', async (req, res) => {
   res.json(await BlogPost.find().sort({ createdAt: -1 }));
 });
@@ -339,7 +346,6 @@ app.put('/api/blog/:id/like', async (req, res) => {
   res.json(await BlogPost.findByIdAndUpdate(req.params.id, { $inc: { likes: 1 } }, { new: true }));
 });
 
-// --- PODCASTS ---
 app.get('/api/podcasts', async (req, res) => {
   res.json(await Podcast.find().sort({ createdAt: -1 }));
 });
@@ -350,7 +356,6 @@ app.post('/api/podcasts', authenticateToken, podcastUploads, async (req, res) =>
   res.status(201).json(pod);
 });
 
-// --- MEDIAS (GALERIE) ---
 app.get('/api/media', async (req, res) => {
   res.json(await Media.find().sort({ createdAt: -1 }));
 });
@@ -361,7 +366,6 @@ app.post('/api/media', authenticateToken, mediaUploads, async (req, res) => {
   res.status(201).json(med);
 });
 
-// --- COMMANDES (ORDERS) ---
 app.post('/api/orders', authenticateToken, async (req, res) => {
   const order = new Order({ ...req.body, status: 'Pending' });
   const saved = await order.save();
@@ -386,7 +390,6 @@ app.get('/api/my-tickets', authenticateToken, async (req, res) => {
   res.json(await Ticket.find({ user: req.user.id }).populate('event').sort({ createdAt: -1 }));
 });
 
-// --- HOME CONTENT ---
 app.get('/api/home-content', async (req, res) => {
   const content = await HomeContent.findOne();
   res.json(content || {});
@@ -399,7 +402,6 @@ app.post('/api/home-content', authenticateToken, async (req, res) => {
   res.status(201).json(content);
 });
 
-// --- CONTACT & UPLOAD ---
 app.post('/api/contact', async (req, res) => {
   const msg = new Contact(req.body);
   await msg.save();
