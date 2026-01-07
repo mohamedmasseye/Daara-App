@@ -95,6 +95,9 @@ const eventUploads = upload.fields([{ name: 'eventImage', maxCount: 1 }, { name:
 const podcastUploads = upload.fields([{ name: 'audioFile', maxCount: 1 }, { name: 'coverImageFile', maxCount: 1 }]);
 const bookUploads = upload.fields([{ name: 'pdfFile', maxCount: 1 }, { name: 'coverImage', maxCount: 1 }]);
 const blogUploads = upload.fields([{ name: 'coverImageFile', maxCount: 1 }, { name: 'pdfDocumentFile', maxCount: 1 }]);
+// ✅ AJOUTS DES DÉFINITIONS MANQUANTES
+const mediaUploads = upload.single('mediaFile');
+const avatarUpload = upload.single('avatar');
 
 // ==========================================
 // 3. IMPORTS DES MODÈLES & AUTH MIDDLEWARE
@@ -153,7 +156,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   res.json(await User.findById(req.user.id).select('-password'));
 });
 
-app.put('/api/auth/me', authenticateToken, upload.single('avatar'), async (req, res) => {
+app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
   const update = { ...req.body };
   if (req.file) update.avatar = req.file.path;
   const user = await User.findByIdAndUpdate(req.user.id, update, { new: true });
@@ -201,6 +204,7 @@ app.post('/api/products', authenticateToken, productUploads, async (req, res) =>
   res.status(201).json(prod);
 });
 
+// ✅ AJOUT ROUTE PUT PRODUITS
 app.put('/api/products/:id', authenticateToken, productUploads, async (req, res) => {
   const update = { ...req.body };
   if (req.files && req.files.length > 0) update.images = req.files.map(f => f.path);
@@ -210,6 +214,29 @@ app.put('/api/products/:id', authenticateToken, productUploads, async (req, res)
 app.delete('/api/products/:id', authenticateToken, async (req, res) => {
   await Product.findByIdAndDelete(req.params.id);
   res.json({ message: "Produit supprimé" });
+});
+
+// --- CATEGORIES ---
+app.get('/api/categories', async (req, res) => {
+  const { type } = req.query;
+  res.json(await Category.find(type ? { type } : {}).sort({ name: 1 }));
+});
+
+app.post('/api/categories', authenticateToken, async (req, res) => {
+  try {
+    const cat = new Category(req.body);
+    await cat.save();
+    res.status(201).json(cat);
+  } catch (e) { res.status(400).json({ error: "Existe déjà" }); }
+});
+
+app.put('/api/categories/:id', authenticateToken, async (req, res) => {
+  res.json(await Category.findByIdAndUpdate(req.params.id, req.body, { new: true }));
+});
+
+app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
+  await Category.findByIdAndDelete(req.params.id);
+  res.json({ message: "Supprimée" });
 });
 
 // --- EVENEMENTS (CRUD) ---
@@ -249,10 +276,20 @@ app.put('/api/blog/:id', authenticateToken, blogUploads, async (req, res) => {
   res.json(await BlogPost.findByIdAndUpdate(req.params.id, update, { new: true }));
 });
 
+app.post('/api/blog/:id/comment', authenticateToken, async (req, res) => {
+  const post = await BlogPost.findByIdAndUpdate(req.params.id, { $push: { comments: req.body } }, { new: true });
+  res.json(post);
+});
+
+app.put('/api/blog/:id/like', async (req, res) => {
+  res.json(await BlogPost.findByIdAndUpdate(req.params.id, { $inc: { likes: 1 } }, { new: true }));
+});
+
 app.delete('/api/blog/:id', authenticateToken, async (req, res) => {
   await BlogPost.findByIdAndDelete(req.params.id);
   res.json({ message: "Article supprimé" });
 });
+
 // --- MÉDIATHÈQUE / GALERIE ---
 app.get('/api/media', async (req, res) => {
   try {
@@ -266,14 +303,18 @@ app.post('/api/media', authenticateToken, mediaUploads, async (req, res) => {
       title: req.body.title,
       category: req.body.category,
       type: req.body.type,
-      url: req.file.path // Cloudinary URL
+      url: req.file.path
     });
     await med.save();
     res.status(201).json(med);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-// Route pour la suppression individuelle (utilisée par la boucle de suppression de masse)
+// ✅ AJOUT ROUTE PUT MÉDIA
+app.put('/api/media/:id', authenticateToken, async (req, res) => {
+  res.json(await Media.findByIdAndUpdate(req.params.id, req.body, { new: true }));
+});
+
 app.delete('/api/media/:id', authenticateToken, async (req, res) => {
   try {
     await Media.findByIdAndDelete(req.params.id);
@@ -348,12 +389,22 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
   res.status(201).json(newNotif);
 });
 
+app.delete('/api/notifications/:id', authenticateToken, async (req, res) => {
+    await Notification.findByIdAndDelete(req.params.id);
+    res.json({ message: "Supprimée" });
+});
+
 app.get('/api/home-content', async (req, res) => { res.json(await HomeContent.findOne() || {}); });
 app.post('/api/home-content', authenticateToken, async (req, res) => {
   await HomeContent.deleteMany({});
   const content = new HomeContent(req.body);
   await content.save();
   res.status(201).json(content);
+});
+
+// --- UPLOAD GÉNÉRIQUE ---
+app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
+  res.json({ url: req.file.path });
 });
 
 // ==========================================
