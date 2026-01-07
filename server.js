@@ -51,7 +51,7 @@ try {
 // ==========================================
 const app = express();
 
-// ✅ CRUCIAL : Indique à Express qu'il est derrière un proxy (Hébergeur)
+// ✅ Autorise le proxy de l'hébergeur pour récupérer l'IP réelle
 app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 5000;
@@ -77,22 +77,14 @@ app.use(cors({
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-// --- 🛡️ CONFIGURATION SÉCURITÉ (LOGIN UNIQUEMENT) ---
-
+// --- 🛡️ SÉCURITÉ : LIMITER UNIQUEMENT LE LOGIN ---
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // ✅ Limite à 5 tentatives
+  windowMs: 15 * 60 * 1000, 
+  max: 5, 
   message: { error: "Trop de tentatives de connexion. Réessayez dans 15 min." },
-  standardHeaders: true,
-  legacyHeaders: false,
-  // ✅ Empêche l'erreur X-Forwarded-For de bloquer le serveur
   validate: { xForwardedForHeader: false }, 
 });
-
-// ✅ On applique la sécurité UNIQUEMENT sur la route de login classique
 app.use('/api/auth/login', loginLimiter);
-
-// Note : L'inscription et Google n'ont plus de limiteur pour éviter les blocages.
 
 // ==========================================
 // 2. CONFIGURATION CLOUDINARY & MULTER
@@ -119,7 +111,7 @@ const mediaUploads = upload.single('mediaFile');
 const avatarUpload = upload.single('avatar');
 
 // ==========================================
-// 3. IMPORTS DES MODÈLES & AUTH
+// 3. IMPORTS DES MODÈLES & AUTH MIDDLEWARE
 // ==========================================
 const User = require('./models/User');
 const Event = require('./models/Event');
@@ -146,9 +138,10 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ==========================================
-// 4. ROUTES API
+// 4. TOUTES LES ROUTES API
 // ==========================================
 
+// --- NOTIFICATIONS ---
 app.post('/api/notifications/subscribe', async (req, res) => {
   try {
     await admin.messaging().subscribeToTopic(req.body.token, 'all_users');
@@ -170,10 +163,7 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
       const message = {
         notification: { title: title || "📅 Nouvel Événement", body: body || "Cliquez pour découvrir les détails." },
         data: { url: url || "/evenements" },
-        android: {
-          priority: "high",
-          notification: { sound: "default", clickAction: "FCM_PLUGIN_ACTIVITY", icon: "ic_stat_notify" }
-        },
+        android: { priority: "high", notification: { sound: "default", clickAction: "FCM_PLUGIN_ACTIVITY", icon: "ic_stat_notify" } },
         topic: "all_users"
       };
       await admin.messaging().send(message);
@@ -187,6 +177,7 @@ app.delete('/api/notifications/:id', authenticateToken, async (req, res) => {
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- AUTHENTIFICATION ---
 app.post('/api/auth/login', async (req, res) => {
   const { identifier, password } = req.body;
   const user = await User.findOne({ $or: [{ email: identifier }, { phone: identifier }] });
@@ -240,6 +231,7 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
   res.json(await User.findByIdAndUpdate(req.user.id, update, { new: true }));
 });
 
+// --- GESTION UTILISATEURS ---
 app.get('/api/users', authenticateToken, async (req, res) => {
   res.json(await User.find().select('-password').sort({ createdAt: -1 }));
 });
@@ -249,6 +241,7 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
   res.json({ message: "Supprimé" });
 });
 
+// --- CATEGORIES ---
 app.get('/api/categories', async (req, res) => {
   const { type } = req.query;
   res.json(await Category.find(type ? { type } : {}).sort({ name: 1 }));
@@ -267,6 +260,7 @@ app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
   res.json({ message: "Supprimé" });
 });
 
+// --- EVENEMENTS ---
 app.get('/api/events', async (req, res) => {
   res.json(await Event.find().sort({ date: 1 }));
 });
@@ -289,6 +283,7 @@ app.delete('/api/events/:id', authenticateToken, async (req, res) => {
   res.json({ message: "Supprimé" });
 });
 
+// --- BOUTIQUE (PRODUITS) ---
 app.get('/api/products', async (req, res) => {
   res.json(await Product.find().populate('category').sort({ createdAt: -1 }));
 });
@@ -305,6 +300,7 @@ app.delete('/api/products/:id', authenticateToken, async (req, res) => {
   res.json({ message: "Supprimé" });
 });
 
+// --- LIVRES ---
 app.get('/api/books', async (req, res) => {
   res.json(await Book.find().sort({ createdAt: -1 }));
 });
@@ -315,6 +311,7 @@ app.post('/api/books', authenticateToken, bookUploads, async (req, res) => {
   res.status(201).json(book);
 });
 
+// --- BLOG ---
 app.get('/api/blog', async (req, res) => {
   res.json(await BlogPost.find().sort({ createdAt: -1 }));
 });
@@ -329,6 +326,7 @@ app.put('/api/blog/:id/like', async (req, res) => {
   res.json(await BlogPost.findByIdAndUpdate(req.params.id, { $inc: { likes: 1 } }, { new: true }));
 });
 
+// --- PODCASTS ---
 app.get('/api/podcasts', async (req, res) => {
   res.json(await Podcast.find().sort({ createdAt: -1 }));
 });
@@ -339,6 +337,7 @@ app.post('/api/podcasts', authenticateToken, podcastUploads, async (req, res) =>
   res.status(201).json(pod);
 });
 
+// --- MEDIAS ---
 app.get('/api/media', async (req, res) => {
   res.json(await Media.find().sort({ createdAt: -1 }));
 });
@@ -349,6 +348,7 @@ app.post('/api/media', authenticateToken, mediaUploads, async (req, res) => {
   res.status(201).json(med);
 });
 
+// --- COMMANDES ---
 app.post('/api/orders', authenticateToken, async (req, res) => {
   const order = new Order({ ...req.body, status: 'Pending' });
   const saved = await order.save();
@@ -373,6 +373,7 @@ app.get('/api/my-tickets', authenticateToken, async (req, res) => {
   res.json(await Ticket.find({ user: req.user.id }).populate('event').sort({ createdAt: -1 }));
 });
 
+// --- HOME CONTENT ---
 app.get('/api/home-content', async (req, res) => {
   const content = await HomeContent.findOne();
   res.json(content || {});
@@ -385,6 +386,7 @@ app.post('/api/home-content', authenticateToken, async (req, res) => {
   res.status(201).json(content);
 });
 
+// --- CONTACT & UPLOAD ---
 app.post('/api/contact', async (req, res) => {
   const msg = new Contact(req.body);
   await msg.save();
