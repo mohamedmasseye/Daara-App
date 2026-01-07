@@ -50,6 +50,7 @@ try {
 // 1. INITIALISATION APP & MIDDLEWARES
 // ==========================================
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'daara_secret_key_super_securisee_123';
 
@@ -77,26 +78,30 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // 1. Limiteur Global (Protection générale)
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 100, 
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: { error: "Trop de requêtes. Veuillez patienter 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
+  // ✅ Optionnel mais recommandé pour éviter les crashs de validation
+  validate: { xForwardedForHeader: false }, 
 });
 
 // 2. Limiteur de LOGIN (Strict - contre le Brute Force)
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 10, // On passe à 10 tentatives pour être un peu plus souple
-  message: { error: "Trop de tentatives de connexion. Accès bloqué 15 min." }
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "Trop de tentatives de connexion. Accès bloqué 15 min." },
+  validate: { xForwardedForHeader: false },
 });
 
 // 3. Limiteur d'INSCRIPTION et GOOGLE (Souple)
 // On autorise plus de tentatives pour éviter de bloquer les nouveaux utilisateurs
 const registerLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 30, // 30 tentatives autorisées (très souple)
-  message: { error: "Trop de tentatives d'inscription ou d'auth Google. Réessayez dans 15 min." }
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: "Trop de tentatives. Réessayez dans 15 min." },
+  validate: { xForwardedForHeader: false },
 });
 
 // Application intelligente des limiteurs
