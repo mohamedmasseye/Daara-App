@@ -12,6 +12,7 @@ const bcrypt = require('bcryptjs');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const admin = require('firebase-admin');
+const rateLimit = require('express-rate-limit'); // ✅ IMPORT SÉCURITÉ
 
 // ==========================================
 // 0. CONFIGURATION FIREBASE (VERSION ROBUSTE)
@@ -71,6 +72,31 @@ app.use(cors({
 
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
+// --- 🛡️ CONFIGURATION RATE LIMITING (SÉCURITÉ ROBOTS) ---
+
+// 1. Limiteur Global (Protection générale)
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requêtes max par IP
+  message: { error: "Trop de requêtes. Veuillez patienter 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// 2. Limiteur d'Authentification (Brute Force)
+const authLimiter = rateLimit({
+  windowMs: 30 * 60 * 1000, // 30 minutes
+  max: 5, // 5 tentatives max
+  message: { error: "Trop de tentatives. Accès bloqué temporairement (30 min) par sécurité." }
+});
+
+// Application des limiteurs
+app.use('/api/', generalLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/google', authLimiter);
+
 
 // ==========================================
 // 2. CONFIGURATION CLOUDINARY & MULTER
@@ -148,24 +174,21 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
     
     if (admin.apps.length) {
       const message = {
-        // ✅ C'est cet objet qui permet la réception APP FERMÉE
         notification: {
           title: title || "📅 Nouvel Événement",
           body: body || "Cliquez pour découvrir les détails."
         },
-        // ✅ C'est cet objet qui permet la redirection au CLIC
         data: {
           url: url || "/evenements", 
         },
         android: {
-  priority: "high",
-  notification: {
-    sound: "default",
-    // ✅ CETTE VALEUR DOIT ÊTRE IDENTIQUE À CELLE DU MANIFEST
-    clickAction: "FCM_PLUGIN_ACTIVITY", 
-    icon: "ic_stat_notify"
-  }
-},
+          priority: "high",
+          notification: {
+            sound: "default",
+            clickAction: "FCM_PLUGIN_ACTIVITY", 
+            icon: "ic_stat_notify"
+          }
+        },
         topic: "all_users"
       };
       await admin.messaging().send(message);
