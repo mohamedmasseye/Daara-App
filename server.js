@@ -158,14 +158,14 @@ app.post('/api/notifications', authenticateToken, async (req, res) => {
           url: url || "/evenements", 
         },
         android: {
-          priority: "high",
-          notification: {
-            sound: "default",
-            clickAction: "FCM_PLUGIN_ACTIVITY", // Important pour Capacitor
-            icon: "stock_ticker_update", // Remplacez par votre icône si besoin
-            color: "#001B3D"
-          }
-        },
+  priority: "high",
+  notification: {
+    sound: "default",
+    // ✅ CETTE VALEUR DOIT ÊTRE IDENTIQUE À CELLE DU MANIFEST
+    clickAction: "FCM_PLUGIN_ACTIVITY", 
+    icon: "ic_stat_notify"
+  }
+},
         topic: "all_users"
       };
       await admin.messaging().send(message);
