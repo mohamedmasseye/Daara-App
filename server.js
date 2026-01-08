@@ -163,6 +163,43 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
   res.json(user);
 });
 
+// --- AUTHENTIFICATION GOOGLE MOBILE ---
+app.post('/api/auth/google-mobile', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    
+    // Vérification du token auprès de Google
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    const payload = ticket.getPayload();
+    const { email, name, picture, sub: googleId } = payload;
+
+    // Chercher ou créer l'utilisateur
+    let user = await User.findOne({ $or: [{ email }, { googleId }] });
+
+    if (!user) {
+      user = new User({
+        fullName: name,
+        email: email,
+        avatar: picture,
+        googleId: googleId,
+        role: 'user'
+      });
+      await user.save();
+    }
+
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user });
+  } catch (error) {
+    console.error("Erreur Google Mobile Auth:", error);
+    res.status(400).json({ error: "Authentification Google échouée" });
+  }
+});
+
 // --- GESTION UTILISATEURS (ADMIN) ---
 app.get('/api/users', authenticateToken, async (req, res) => {
   res.json(await User.find().select('-password').sort({ createdAt: -1 }));
