@@ -167,7 +167,7 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
 app.post('/api/auth/google-mobile', async (req, res) => {
   try {
     // 🔍 LOG DE DIAGNOSTIC : On regarde ce que le téléphone envoie réellement
-    console.log("📥 [DEBUG] Données reçues du mobile :", JSON.stringify(req.body));
+    //console.log("📥 [DEBUG] Données reçues du mobile :", JSON.stringify(req.body));
 
     // On essaie de récupérer le token par tous les noms possibles
     const idToken = req.body.token || req.body.idToken || req.body.authentication?.idToken;
