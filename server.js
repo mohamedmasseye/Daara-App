@@ -166,16 +166,21 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
 // --- AUTHENTIFICATION GOOGLE MOBILE (Version Finale) ---
 app.post('/api/auth/google-mobile', async (req, res) => {
   try {
-    // ✅ On récupère "token" car c'est ce que ton LoginPublic envoie { token: idToken }
-    const idToken = req.body.token;
+    // 🔍 LOG DE DIAGNOSTIC : On regarde ce que le téléphone envoie réellement
+    console.log("📥 [DEBUG] Données reçues du mobile :", JSON.stringify(req.body));
+
+    // On essaie de récupérer le token par tous les noms possibles
+    const idToken = req.body.token || req.body.idToken || req.body.authentication?.idToken;
 
     if (!idToken) {
-      return res.status(400).json({ error: "Jeton Google manquant dans la requête." });
+      console.error("❌ [DEBUG] Aucun token n'a été trouvé dans req.body");
+      return res.status(400).json({ error: "Jeton Google (idToken) manquant." });
     }
+
+    console.log("🔑 [DEBUG] Token extrait avec succès, vérification Google en cours...");
 
     const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
     
-    // Vérification auprès des serveurs Google
     const ticket = await client.verifyIdToken({
       idToken: idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
@@ -184,28 +189,19 @@ app.post('/api/auth/google-mobile', async (req, res) => {
     const payload = ticket.getPayload();
     const { email, name, picture, sub: googleId } = payload;
 
-    // Recherche ou création de l'utilisateur
     let user = await User.findOne({ $or: [{ email }, { googleId }] });
-
     if (!user) {
-      user = new User({
-        fullName: name,
-        email: email,
-        avatar: picture,
-        googleId: googleId,
-        role: 'user'
-      });
+      user = new User({ fullName: name, email, avatar: picture, googleId, role: 'user' });
       await user.save();
     }
 
-    // Génération du token JWT pour ton application
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
-    
+    console.log("✅ [DEBUG] Authentification réussie pour :", email);
     res.json({ token, user });
 
   } catch (error) {
-    console.error("❌ Erreur Verification Google:", error.message);
-    res.status(400).json({ error: "Authentification Google invalide." });
+    console.error("❌ [DEBUG] Erreur fatale Google Auth :", error.message);
+    res.status(400).json({ error: "Authentification Google échouée : " + error.message });
   }
 });
 
