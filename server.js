@@ -163,22 +163,28 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
   res.json(user);
 });
 
-// --- AUTHENTIFICATION GOOGLE MOBILE ---
+// --- AUTHENTIFICATION GOOGLE MOBILE (Version Finale) ---
 app.post('/api/auth/google-mobile', async (req, res) => {
   try {
-    const { idToken } = req.body;
-    
-    // Vérification du token auprès de Google
+    // ✅ On récupère "token" car c'est ce que ton LoginPublic envoie { token: idToken }
+    const idToken = req.body.token;
+
+    if (!idToken) {
+      return res.status(400).json({ error: "Jeton Google manquant dans la requête." });
+    }
+
     const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    
+    // Vérification auprès des serveurs Google
     const ticket = await client.verifyIdToken({
-      idToken,
+      idToken: idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
     
     const payload = ticket.getPayload();
     const { email, name, picture, sub: googleId } = payload;
 
-    // Chercher ou créer l'utilisateur
+    // Recherche ou création de l'utilisateur
     let user = await User.findOne({ $or: [{ email }, { googleId }] });
 
     if (!user) {
@@ -192,11 +198,14 @@ app.post('/api/auth/google-mobile', async (req, res) => {
       await user.save();
     }
 
+    // Génération du token JWT pour ton application
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
+    
     res.json({ token, user });
+
   } catch (error) {
-    console.error("Erreur Google Mobile Auth:", error);
-    res.status(400).json({ error: "Authentification Google échouée" });
+    console.error("❌ Erreur Verification Google:", error.message);
+    res.status(400).json({ error: "Authentification Google invalide." });
   }
 });
 
