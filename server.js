@@ -259,6 +259,15 @@ app.delete('/api/products/:id', authenticateToken, async (req, res) => {
 });
 
 // --- CATEGORIES ---
+
+app.get('/api/categories/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    const list = await Category.find({ type }).sort({ name: 1 });
+    res.json(list);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/categories', async (req, res) => {
   const { type } = req.query;
   res.json(await Category.find(type ? { type } : {}).sort({ name: 1 }));
@@ -280,6 +289,8 @@ app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
   await Category.findByIdAndDelete(req.params.id);
   res.json({ message: "Supprimée" });
 });
+
+
 
 // --- EVENEMENTS (CRUD) ---
 app.get('/api/events', async (req, res) => { res.json(await Event.find().sort({ date: 1 })); });
