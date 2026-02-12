@@ -174,7 +174,9 @@ app.post('/api/auth/google', async (req, res) => {
     }
 
     const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-    
+    console.log("TYPE TOKEN =", typeof idToken);
+console.log("TOKEN START =", idToken?.substring(0, 40));
+console.log("AUDIENCE =", process.env.GOOGLE_CLIENT_ID);
     // Vérification du jeton auprès de Google
     const ticket = await client.verifyIdToken({
       idToken: idToken,
