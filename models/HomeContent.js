@@ -15,7 +15,7 @@ const HomeContentSchema = new mongoose.Schema({
   about: {
     title1: String, highlight1: String,
     title2: String, highlight2: String,
-    text1: String, text2: String, image: String
+    text1: String, text2: String, image: String,bioPdf: String
   },
   pillars: {
     shopImage: String, libraryImage: String, mediaImage: String
