@@ -163,6 +163,53 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
   res.json(user);
 });
 
+// --- AUTHENTIFICATION GOOGLE (WEB & GÉNÉRIQUE) ---
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    // Récupération du token (idToken ou credential selon la bibliothèque utilisée)
+    const idToken = req.body.token || req.body.idToken || req.body.credential;
+
+    if (!idToken) {
+      return res.status(400).json({ error: "Token Google manquant." });
+    }
+
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    
+    // Vérification du jeton auprès de Google
+    const ticket = await client.verifyIdToken({
+      idToken: idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    const payload = ticket.getPayload();
+    const { email, name, picture, sub: googleId } = payload;
+
+    // Recherche ou création de l'utilisateur
+    let user = await User.findOne({ $or: [{ email }, { googleId }] });
+    
+    if (!user) {
+      user = new User({ 
+        fullName: name, 
+        email, 
+        avatar: picture, 
+        googleId, 
+        role: 'user' 
+      });
+      await user.save();
+    }
+
+    // Génération du token JWT Daara
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
+    
+    console.log("✅ Connexion Google Web réussie :", email);
+    res.json({ token, user });
+
+  } catch (error) {
+    console.error("❌ Erreur Google Auth Web :", error.message);
+    res.status(400).json({ error: "Authentification Google échouée." });
+  }
+});
+
 // --- AUTHENTIFICATION GOOGLE MOBILE (Version Finale) ---
 app.post('/api/auth/google-mobile', async (req, res) => {
   try {
