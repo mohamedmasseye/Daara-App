@@ -163,52 +163,43 @@ app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
   res.json(user);
 });
 
-// --- AUTHENTIFICATION GOOGLE (WEB & GÉNÉRIQUE) ---
+// --- AUTHENTIFICATION GOOGLE (Via Firebase - Pas besoin de Client ID) ---
 app.post('/api/auth/google', async (req, res) => {
   try {
-    // Récupération du token (idToken ou credential selon la bibliothèque utilisée)
     const idToken = req.body.token || req.body.idToken || req.body.credential;
 
     if (!idToken) {
-      return res.status(400).json({ error: "Token Google manquant." });
+      return res.status(400).json({ error: "Token manquant." });
     }
 
-    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-    console.log("TYPE TOKEN =", typeof idToken);
-console.log("TOKEN START =", idToken?.substring(0, 40));
-console.log("AUDIENCE =", process.env.GOOGLE_CLIENT_ID);
-    // Vérification du jeton auprès de Google
-    const ticket = await client.verifyIdToken({
-      idToken: idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    
-    const payload = ticket.getPayload();
-    const { email, name, picture, sub: googleId } = payload;
+    // ✅ On utilise Firebase Admin pour vérifier le jeton
+    // Cette méthode utilise ton serviceAccountKey.json déjà configuré
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const { email, name, picture, uid } = decodedToken;
 
     // Recherche ou création de l'utilisateur
-    let user = await User.findOne({ $or: [{ email }, { googleId }] });
+    let user = await User.findOne({ $or: [{ email }, { googleId: uid }] });
     
     if (!user) {
       user = new User({ 
         fullName: name, 
         email, 
         avatar: picture, 
-        googleId, 
+        googleId: uid, // On utilise l'UID Firebase
         role: 'user' 
       });
       await user.save();
     }
 
-    // Génération du token JWT Daara
+    // Génération de ton token JWT interne
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
     
-    console.log("✅ Connexion Google Web réussie :", email);
+    console.log("✅ Connexion réussie via Firebase :", email);
     res.json({ token, user });
 
   } catch (error) {
-    console.error("❌ Erreur Google Auth Web :", error.message);
-    res.status(400).json({ error: "Authentification Google échouée." });
+    console.error("❌ Erreur Auth Firebase :", error.message);
+    res.status(401).json({ error: "Session Google invalide ou expirée." });
   }
 });
 
