@@ -86,7 +86,7 @@ cloudinary.config({
 
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: { folder: 'daara-uploads', allowed_formats: ['jpg', 'png', 'jpeg', 'pdf', 'mp3', 'webp'], resource_type: 'auto' }
+  params: { folder: 'daara-uploads', allowed_formats: ['jpg', 'png', 'jpeg', 'pdf', 'mp3', 'webp','avif'], resource_type: 'auto' }
 });
 
 const upload = multer({ storage: storage, limits: { fileSize: 100 * 1024 * 1024 } });
