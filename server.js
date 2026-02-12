@@ -385,10 +385,37 @@ app.post('/api/podcasts', authenticateToken, podcastUploads, async (req, res) =>
 });
 
 app.put('/api/podcasts/:id', authenticateToken, podcastUploads, async (req, res) => {
-  const update = { ...req.body };
-  if (req.files['audioFile']) update.audioUrl = req.files['audioFile'][0].path;
-  if (req.files['coverImageFile']) update.coverImage = req.files['coverImageFile'][0].path;
-  res.json(await Podcast.findByIdAndUpdate(req.params.id, update, { new: true }));
+  try {
+    const updateData = { ...req.body };
+
+    // On vérifie si des fichiers ont été envoyés avant de les traiter
+    if (req.files) {
+      // Si un nouvel audio est envoyé
+      if (req.files['audioFile'] && req.files['audioFile'].length > 0) {
+        updateData.audioUrl = req.files['audioFile'][0].path;
+      }
+      
+      // Si une nouvelle image de couverture est envoyée
+      if (req.files['coverImageFile'] && req.files['coverImageFile'].length > 0) {
+        updateData.coverImage = req.files['coverImageFile'][0].path;
+      }
+    }
+
+    const updatedPodcast = await Podcast.findByIdAndUpdate(
+      req.params.id, 
+      updateData, 
+      { new: true }
+    );
+
+    if (!updatedPodcast) {
+      return res.status(404).json({ error: "Podcast non trouvé" });
+    }
+
+    res.json(updatedPodcast);
+  } catch (e) {
+    console.error("❌ Erreur lors de la modification du Podcast:", e.message);
+    res.status(500).json({ error: "Erreur serveur lors de la mise à jour." });
+  }
 });
 
 app.delete('/api/podcasts/:id', authenticateToken, async (req, res) => {
