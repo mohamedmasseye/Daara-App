@@ -127,6 +127,15 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Middleware supplémentaire pour vérifier si c'est un ADMIN
+const isAdmin = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ error: "Privilèges insuffisants." });
+    }
+};
+
 // ==========================================
 // 4. TOUTES LES ROUTES API
 // ==========================================
@@ -220,7 +229,57 @@ app.post('/api/auth/google-mobile', async (req, res) => {
 app.get('/api/users', authenticateToken, async (req, res) => {
   res.json(await User.find().select('-password').sort({ createdAt: -1 }));
 });
-app.delete('/api/users/:id', authenticateToken, async (req, res) => {
+
+
+// ✅ AJOUT ROUTE : CRÉER UN UTILISATEUR (MANQUANT)
+app.post('/api/users', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const { fullName, identifier, role, password } = req.body;
+        const isEmail = identifier.includes('@');
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const newUser = new User({ 
+            fullName, 
+            email: isEmail ? identifier : undefined, 
+            phone: !isEmail ? identifier : undefined, 
+            password: hashedPassword,
+            role: role || 'user'
+        });
+
+        await newUser.save();
+        // On retourne l'utilisateur sans le mot de passe
+        const userResponse = newUser.toObject();
+        delete userResponse.password;
+        res.status(201).json(userResponse);
+    } catch (e) { 
+        res.status(400).json({ error: "L'identifiant est déjà utilisé." }); 
+    }
+});
+
+// ✅ AJOUT ROUTE : MODIFIER UN UTILISATEUR (MANQUANT)
+app.put('/api/users/:id', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const { fullName, role } = req.body;
+        const updated = await User.findByIdAndUpdate(
+            req.params.id, 
+            { fullName, role }, 
+            { new: true }
+        ).select('-password');
+        res.json(updated);
+    } catch (e) { res.status(400).json({ error: "Erreur lors de la mise à jour." }); }
+});
+
+// ✅ AJOUT ROUTE : RESET PASSWORD PAR ADMIN (MANQUANT)
+app.put('/api/users/:id/reset-password', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const { newPassword } = req.body;
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await User.findByIdAndUpdate(req.params.id, { password: hashedPassword });
+        res.json({ message: "Mot de passe mis à jour." });
+    } catch (e) { res.status(400).json({ error: "Erreur reset password." }); }
+});
+
+app.delete('/api/users/:id', authenticateToken, isAdmin, async (req, res) => {
   await User.findByIdAndDelete(req.params.id);
   res.json({ message: "Utilisateur supprimé" });
 });
