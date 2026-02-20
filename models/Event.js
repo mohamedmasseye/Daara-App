@@ -8,6 +8,7 @@ const eventSchema = new mongoose.Schema({
   location: { type: String },
   locationLink: { type: String },
   isOnline: { type: Boolean, default: false },
+  isDaily: { type: Boolean, default: false },
   
   // --- MÉDIAS ---
   image: { type: String },      // URL de l'affiche
