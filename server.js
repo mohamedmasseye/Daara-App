@@ -354,14 +354,24 @@ app.post('/api/events', authenticateToken, eventUploads, async (req, res) => {
   res.status(201).json(evt);
 });
 app.put('/api/events/:id', authenticateToken, eventUploads, async (req, res) => {
-  const update = { ...req.body };
-  if (req.files['eventImage']) update.image = req.files['eventImage'][0].path;
-  if (req.files['eventDocument']) update.documentUrl = req.files['eventDocument'][0].path;
-  res.json(await Event.findByIdAndUpdate(req.params.id, update, { new: true }));
-});
-app.delete('/api/events/:id', authenticateToken, async (req, res) => {
-  await Event.findByIdAndDelete(req.params.id);
-  res.json({ message: "Événement supprimé" });
+  try {
+    const update = { ...req.body };
+    
+    // Nettoyage des dates pour éviter les erreurs de "Cast"
+    if (!update.date || update.date === "Invalid Date") delete update.date;
+    if (!update.endDate || update.endDate === "" || update.endDate === "Invalid Date") {
+        update.endDate = null; // On force à null si c'est vide
+    }
+
+    if (req.files['eventImage']) update.image = req.files['eventImage'][0].path;
+    if (req.files['eventDocument']) update.documentUrl = req.files['eventDocument'][0].path;
+    
+    const updatedEvent = await Event.findByIdAndUpdate(req.params.id, update, { new: true });
+    res.json(updatedEvent);
+  } catch (error) {
+    console.error("Erreur Update Event:", error);
+    res.status(500).json({ error: "Erreur lors de la mise à jour." });
+  }
 });
 
 // --- BLOG ---
