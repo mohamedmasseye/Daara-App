@@ -13,6 +13,8 @@ const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const admin = require('firebase-admin');
 const rateLimit = require('express-rate-limit');
+const Log = require('./models/Log');
+const os = require('os');
 
 // ==========================================
 // 0. CONFIGURATION FIREBASE
@@ -508,6 +510,62 @@ app.post('/api/home-content', authenticateToken, async (req, res) => {
 // --- UPLOAD GÉNÉRIQUE ---
 app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
   res.json({ url: req.file.path });
+});
+
+app.get('/api/admin/system-health', authenticateToken, isAdmin, async (req, res) => {
+  const health = {
+    uptime: process.uptime(),
+    message: 'OK',
+    timestamp: Date.now(),
+    mongoConnection: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
+    memoryUsage: process.memoryUsage(),
+    osLoad: require('os').loadavg(),
+  };
+  res.json(health);
+});
+
+// 1. Statistiques vitales du serveur
+app.get('/api/admin/monitoring/stats', authenticateToken, isAdmin, async (req, res) => {
+  const stats = {
+    uptime: process.uptime(),
+    platform: process.platform,
+    memory: {
+      free: Math.round(os.freemem() / 1024 / 1024),
+      total: Math.round(os.totalmem() / 1024 / 1024),
+      usage: Math.round((process.memoryUsage().heapUsed / 1024 / 1024))
+    },
+    database: mongoose.connection.readyState === 1 ? 'Connecté' : 'Erreur',
+    version: "1.2.0-stable", // Ta version actuelle
+    lastDeploy: fs.statSync(__filename).mtime // Date du dernier redémarrage
+  };
+  res.json(stats);
+});
+
+// 2. Récupérer les derniers logs d'erreurs
+app.get('/api/admin/monitoring/logs', authenticateToken, isAdmin, async (req, res) => {
+  const logs = await Log.find().sort({ timestamp: -1 }).limit(20).populate('userId', 'fullName');
+  res.json(logs);
+});
+
+// 3. Vider les logs
+app.delete('/api/admin/monitoring/logs', authenticateToken, isAdmin, async (req, res) => {
+  await Log.deleteMany({});
+  res.json({ message: "Logs nettoyés" });
+});
+
+// ✅ MIDDLEWARE CAPTUREUR D'ERREUR (À mettre tout à la fin de server.js, après les routes)
+app.use(async (err, req, res, next) => {
+  console.error(err.stack);
+  // On enregistre l'erreur en base de données automatiquement !
+  await new Log({
+    message: err.message,
+    path: req.path,
+    method: req.method,
+    stack: err.stack,
+    userId: req.user ? req.user.id : null
+  }).save();
+
+  res.status(500).json({ error: "Erreur interne du serveur." });
 });
 
 // ==========================================
