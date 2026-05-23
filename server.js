@@ -167,10 +167,25 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 });
 
 app.put('/api/auth/me', authenticateToken, avatarUpload, async (req, res) => {
-  const update = { ...req.body };
-  if (req.file) update.avatar = req.file.path;
-  const user = await User.findByIdAndUpdate(req.user.id, update, { new: true });
-  res.json(user);
+  try {
+    const update = { ...req.body };
+    if (req.file) update.avatar = req.file.path;
+
+    // Les champs phone et email ont un index unique+sparse : une chaîne vide ""
+    // est considérée comme une valeur réelle et provoque E11000 si plusieurs
+    // utilisateurs ont phone:"". On doit retirer le champ entièrement via $unset.
+    const unset = {};
+    if (update.phone === '' || update.phone === null) { unset.phone = 1; delete update.phone; }
+    if (update.email === '' || update.email === null) { unset.email = 1; delete update.email; }
+
+    const ops = { $set: update };
+    if (Object.keys(unset).length) ops.$unset = unset;
+
+    const user = await User.findByIdAndUpdate(req.user.id, ops, { new: true });
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: "Erreur lors de la mise à jour du profil." });
+  }
 });
 
 // ✅ SUPPRESSION DU COMPTE (Nécessaire Play Store 2026)
