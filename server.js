@@ -589,6 +589,14 @@ app.use(async (err, req, res, next) => {
 mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI)
   .then(async () => {
     console.log('✅ MongoDB Connecté');
+
+    // Nettoyage one-shot : retire les phone:"" qui violent l'index unique+sparse
+    const fixed = await User.updateMany(
+      { phone: { $in: ['', null] } },
+      { $unset: { phone: 1 } }
+    );
+    if (fixed.modifiedCount > 0) console.log(`🔧 Cleanup: ${fixed.modifiedCount} utilisateur(s) avec phone vide corrigé(s)`);
+
     const adminExist = await User.findOne({ email: "admin@daara.com" });
     if (!adminExist) {
       const hashedPassword = await bcrypt.hash("password123", 10);
