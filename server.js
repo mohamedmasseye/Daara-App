@@ -391,6 +391,16 @@ app.put('/api/events/:id', authenticateToken, eventUploads, async (req, res) => 
   }
 });
 
+app.delete('/api/events/:id', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await Event.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "Événement introuvable." });
+    res.json({ message: "Événement supprimé." });
+  } catch (error) {
+    res.status(500).json({ error: "Erreur lors de la suppression." });
+  }
+});
+
 // --- BLOG ---
 app.get('/api/blog', async (req, res) => { res.json(await BlogPost.find().sort({ createdAt: -1 })); });
 app.post('/api/blog', authenticateToken, blogUploads, async (req, res) => {
